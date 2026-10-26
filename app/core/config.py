@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     worker_concurrency: int = Field(default=2, ge=1, le=8)
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
+    yookassa_fake_enabled: bool = False  # test-only opt-in, never production
     yookassa_vat_code: int = Field(default=0, ge=0, le=6)
     supplier_api_enabled: bool = False
     supplier_procurement_enabled: bool = False

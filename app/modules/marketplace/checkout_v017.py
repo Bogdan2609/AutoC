@@ -369,7 +369,7 @@ async def request_detail(db,order):
 @router.get('/v017/orders/{order_id}')
 async def detail(order_id:uuid.UUID,user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
     order=await db.get(Order,order_id)
-    if not order or order.user_id!=user.id or not (order.request_details or {}).get('workflow')=='v017':
+    if not order or order.user_id!=user.id or (order.request_details or {}).get('workflow') != 'v017':
         raise HTTPException(404,'Request not found')
     return await request_detail(db,order)
 

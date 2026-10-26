@@ -260,8 +260,12 @@ async def one(factory=None):
    # Crash recovery: do not automatically retry purchase/refund calls with uncertain result.
    stalled=await db.scalar(select(Job).where(Job.status=='running',Job.due_at<utc()).order_by(Job.due_at).with_for_update(skip_locked=True))
    if stalled:
-    stalled.status='pending' if stalled.kind in ('search','feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization') else 'manual_review'
-    stalled.last_error='worker_timeout_requires_reconciliation'
+    safe_retry = stalled.kind in ('search','feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization')
+    stalled.status='pending' if safe_retry and stalled.attempts < 5 else 'manual_review'
+    stalled.last_error='worker_timeout_requires_reconciliation' if not safe_retry else (
+        'retry_budget_exhausted_manual_review' if stalled.attempts >= 5 else 'retry_backoff_after_timeout')
+    if stalled.status == 'pending':
+     stalled.due_at=utc()+timedelta(minutes=min(2**max(1,stalled.attempts),60))
     await db.commit()
     return True
    return False
@@ -372,6 +376,8 @@ async def _consumer_loop():
    await asyncio.sleep(3)
 
 async def main():
+ from app.modules.offer_engine.secret_redaction import install_redaction
+ install_redaction()
  # Each task calls one(), which opens a separate AsyncSession. Never share a
  # session between concurrent consumers. SQL SKIP LOCKED prevents double claim.
  concurrency=get_settings().worker_concurrency

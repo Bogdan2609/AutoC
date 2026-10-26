@@ -65,22 +65,35 @@ def _safe_archive(z: ZipFile, *, max_size: int, max_members: int = 100) -> None:
             raise FeedFormatError('Executable / macro member disallowed')
 
 
-def _positive_int(v: object, *, default: int | None = None) -> int:
-    s = str(v or '').strip()
+def _integer(v: object, *, minimum: int, default: int | None = None) -> int:
+    """Parse integer CSV/XLSX cells; accept 1.0 but never fractional/negative values.
+
+    Stock and order quantities have DIFFERENT semantics: stock may be zero;
+    minimum order and pack multiple must be strictly positive.
+    """
+    s = str(v if v is not None else '').strip()
     if not s and default is not None:
         return default
-    if not re.fullmatch(r'[0-9]{1,9}', s):
-        raise ValueError('Invalid positive integer')
-    n = int(s)
-    if n < 1:
-        raise ValueError('Expected positive integer')
+    if not re.fullmatch(r'[0-9]{1,9}(?:\.0+)?', s):
+        raise ValueError('Invalid integer quantity')
+    n = int(s.split('.')[0])
+    if n < minimum:
+        raise ValueError('Quantity below allowed minimum')
     return n
 
 
+def _positive_int(v: object, *, default: int | None = None) -> int:
+    return _integer(v, minimum=1, default=default)
+
+
+def _nonnegative_int(v: object, *, default: int | None = None) -> int:
+    return _integer(v, minimum=0, default=default)
+
+
 def parse_stock(v: object) -> tuple[str, int, bool]:
-    raw = str(v or '').strip().replace(' ', '')
-    if re.fullmatch(r'\d{1,9}', raw):
-        return raw, int(raw), False
+    raw = str(v if v is not None else '').strip().replace(' ', '')
+    if re.fullmatch(r'\d{1,9}(?:\.0+)?', raw):
+        return raw, _nonnegative_int(raw), False
     m = re.fullmatch(r'>\s*(\d{1,9})', raw)
     if m:
         return raw, int(m.group(1)) + 1, True
@@ -142,7 +155,7 @@ def _partkom(path: Path) -> Iterator[tuple[int, FeedRow | None, str | None]]:
                 row = _row(line=line, supplier='partkom', sku='', brand=r['Бренд'],
                            article=r['Артикул'], description=r['Описание'], warehouse=r['Склад'],
                            price=r['Цена'], stock=r['Количество'], minimum=r['Мин.Партия'],
-                           multiple=r['Мин.Партия'], days=None)
+                           multiple=1, days=None)  # CSV has minimum but NO multiple column
                 yield line, row, None
             except (ValueError, TypeError, KeyError) as exc:
                 yield line, None, str(exc)[:180]

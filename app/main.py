@@ -60,6 +60,8 @@ from app.modules.catalog_ext.category_facets import admin as category_template_a
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.modules.offer_engine.secret_redaction import install_redaction
+    install_redaction()
     try:
         yield
     finally:
@@ -67,6 +69,8 @@ async def lifespan(app: FastAPI):
         await close_client()
         from app.modules.offer_engine.http_pool import close_clients
         await close_clients()
+        from app.modules.offer_engine.soap_client import close_soap_clients
+        await close_soap_clients()
 
 from importlib.metadata import PackageNotFoundError, version as package_version
 
@@ -86,8 +90,19 @@ async def bound_public_requests(request:Request,call_next):
     if is_expensive or is_webhook:
         # Ingress must also reject chunked/oversized bodies; this is a local guard.
         length=request.headers.get('content-length')
-        if length is not None and (not length.isdecimal() or int(length)>(16384 if is_webhook else 65536)):
+        limit_bytes = 16384 if is_webhook else 65536
+        if length is not None and (not length.isdecimal() or int(length)>limit_bytes):
             return JSONResponse({'detail':'Request body too large'},status_code=413)
+        # Content-Length is not authoritative for chunked/streaming requests.
+        # Bound memory BEFORE parsing any untrusted JSON, even without a header.
+        collected = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > limit_bytes:
+                return JSONResponse({'detail':'Request body too large'},status_code=413)
+            collected.append(chunk)
+        request._body = b''.join(collected)
         try:
             await enforce_budget('webhook' if is_webhook else 'public_costly',peer_ip(request),
                 limit=60 if is_webhook else 20,period=60)

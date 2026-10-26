@@ -143,7 +143,7 @@ def customer_price_rounding(value: Decimal, mode: str='EXACT_RUB', tiers=None,
         uplift_cap_met=False
         tier=next((x for x in config if x.upper_exclusive is None or raw < x.upper_exclusive),config[-1])
         pct=tier.max_uplift_pct if max_uplift_pct is None else max_uplift_pct
-        for step in [tier.step]+[x for x in (Decimal('100'),Decimal('50'),Decimal('10'),Decimal('5'),Decimal('1')) if x<tier.step]:
+        for step in sorted({tier.step, *(x for x in (Decimal('100'),Decimal('50'),Decimal('10'),Decimal('5'),Decimal('1')) if x<tier.step)}, reverse=True):
             candidate=ceil_to(raw,step)
             if raw>0 and (candidate-raw)*HUNDRED > raw*pct:
                 continue
@@ -163,7 +163,7 @@ class PricePreview(BaseModel):
     strategy: Literal['MARKUP_SIMULATION','COST_COVERAGE'] = 'MARKUP_SIMULATION'
     # For OWN: gross purchase invoice amount; for AGENCY: customer sale price.
     source_gross: Decimal = Field(ge=0,max_digits=20,decimal_places=2)
-    markup_percent: Decimal = Field(default=Decimal('0'),ge=0,le=1000,max_digits=7,decimal_places=2)
+    markup_percent: Decimal = Field(default=Decimal('0'),ge=0,le=500,max_digits=7,decimal_places=2)
     fixed_markup: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     floor_price: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     min_contribution: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
@@ -172,7 +172,7 @@ class PricePreview(BaseModel):
     packaging: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     other_costs: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     tax_reserve: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
-    sbp_percent: Decimal = Field(default=Decimal('0'),ge=0,le=100,max_digits=7,decimal_places=3)
+    sbp_percent: Decimal = Field(default=Decimal('0'),ge=0,le=10,max_digits=7,decimal_places=3)
     sbp_fixed: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     sbp_cap: Decimal | None = Field(default=None,ge=0,max_digits=20,decimal_places=2)
     marketplace_percent: Decimal = Field(default=Decimal('0'),ge=0,le=100,max_digits=7,decimal_places=3)
@@ -199,6 +199,8 @@ class PricePreview(BaseModel):
     price_ceiling: Decimal | None = Field(default=None,ge=0,max_digits=20,decimal_places=2)
     simulated: Literal[True] = True
 
+    # Prevent catastrophically high simulated markup/bank-fee parameters.
+    # For production these limits must be reviewed against actual merchant tariffs.
     @model_validator(mode='after')
     def validate(self):
         if self.operation_date.year != 2026:
@@ -239,7 +241,7 @@ def calculate(req:PricePreview)->dict:
                       'rounding_mode':'COST_COVERAGE_KOPECK_UP','rounding_step_used':'0.01',
                       'rounding_uplift':'0.00','price_ceiling_met':True,'rounding_uplift_cap_met':True}
         else:
-            preliminary=max(req.floor_price,(req.source_gross+req.procurement_delivery+req.packaging+req.other_costs)*(1+req.markup_percent/HUNDRED)+req.fixed_markup)
+            preliminary=max(req.floor_price,(req.source_gross+req.procurement_delivery+req.last_mile_delivery+req.packaging+req.other_costs)*(1+req.markup_percent/HUNDRED)+req.fixed_markup)
             rounding=customer_price_rounding(preliminary, req.rounding_mode, req.rounding_tiers, req.rounding_max_uplift_pct, req.price_ceiling)
             customer=Decimal(rounding['customer_gross'])
         if not rounding['price_ceiling_met']:
@@ -264,7 +266,7 @@ def calculate(req:PricePreview)->dict:
         if floor_met is False:
             warnings.append('The planned minimum contribution is not met; preview does not silently raise the selling price.')
         return {'status':'SIMULATION' if rounding['price_ceiling_met'] and rounding['rounding_uplift_cap_met'] else 'SIMULATION_CONSTRAINT_FAILED','sale_model':'OWN',**rounding, 'purchase_gross':str(req.source_gross),
-                'landed_cost_gross':str(round_money(req.source_gross+req.procurement_delivery+req.packaging+req.other_costs+req.tax_reserve)),
+                'landed_cost_gross':str(round_money(req.source_gross+req.procurement_delivery+req.last_mile_delivery+req.packaging+req.other_costs+req.tax_reserve)),
                 'delivery_and_other_costs':str(costs),'bank_fee':str(bank),'platform_fee_gross':'0.00',
                 'seller_payout_gross':None,'cash_contribution_before_tax':str(cash_contribution),
                 'output_vat_estimate':vat_amount,'net_contribution_estimate':str(contribution) if contribution is not None else None,

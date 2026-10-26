@@ -65,7 +65,7 @@ async def test_accounts_cart_sbp_paid_outbox(client,admin_headers,monkeypatch):
                                   json={**body,'phone':'+79995557756'})
     assert changed_key.status_code==409  # Reused key cannot silently accept new buyer details
     assert (await client.get(f'/api/v1/orders/{oid}',headers=h)).json()['status']=='awaiting_sbp'
-    callback={'event':'payment.succeeded','object':{'id':'fake-payment-123','status':'succeeded'}}
+    callback={'type':'notification','event':'payment.succeeded','object':{'id':'fake-payment-123','status':'succeeded'}}
     forged=await client.post('/api/v1/payments/yookassa/webhook',json=callback)
     assert forged.status_code==200
     assert (await client.get(f'/api/v1/orders/{oid}',headers=h)).json()['status']=='awaiting_sbp'

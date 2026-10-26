@@ -6,13 +6,18 @@ delivery settings and sandbox supplier-order tests have been verified. No specul
 from dataclasses import dataclass,field
 from decimal import Decimal
 import re
+import json
 from xml.etree import ElementTree as ET
 import httpx
 from app.modules.offer_engine.http_pool import get_client
 from app.core.config import get_settings
 from app.modules.catalog.normalize import normalize_article,normalize_brand
+from app.modules.offer_engine.supplier_errors import (
+    Unavailable, NetworkError, UpstreamBusinessError, UnsupportedCurrencyError, MalformedResponseError,
+)
+from app.modules.offer_engine.currency import require_rub, rub_amount
+from app.modules.offer_engine.resilience import classify_http, protected_search
 
-class Unavailable(Exception):pass
 @dataclass(frozen=True)
 class Offer:
  code:str
@@ -27,12 +32,12 @@ class Offer:
  minimum:int=1
  multiple:int=1
  public_meta:dict=field(default_factory=dict)
+ currency:str='RUB'
+ def __post_init__(self):
+  if self.currency!='RUB':raise UnsupportedCurrencyError('Offer currency must equal RUB')
 def dec(x):
- try:
-  v=Decimal(str(x).replace(',','.'))
-  if not v.is_finite() or v<0:raise ValueError('Invalid price')
-  return v.quantize(Decimal('.01'))
- except Exception as e:raise Unavailable('Invalid supplier price') from e
+ return rub_amount(x)
+
 def as_int(v,default=None):
  try:return int(v)
  except (ValueError,TypeError):return default
@@ -59,6 +64,7 @@ def parse_adeo_stock(rest):
 
 def exact(offer,brand,article):return normalize_brand(offer.brand)==normalize_brand(brand) and normalize_article(offer.article)==normalize_article(article)
 
+@protected_search
 class PartKom:
  code='partkom'
  async def search(self,brand,article,config=None):
@@ -68,8 +74,10 @@ class PartKom:
   response=await cli.get('https://ws.part-kom.ru/v4/search/offers',
    params={'number':article,'find_substitutes':0,'store':0},
    auth=(s.partkom_login,s.partkom_password),timeout=httpx.Timeout(14,connect=3))
-  response.raise_for_status();rows=response.json()
-  if not isinstance(rows,list):raise Unavailable('PartKom unexpected data')
+  classify_http(response)
+  try:rows=json.loads(response.content, parse_float=Decimal)
+  except (ValueError, TypeError) as exc:raise MalformedResponseError('Invalid supplier JSON response') from exc
+  if not isinstance(rows,list):raise MalformedResponseError('PartKom unexpected data')
   found=[]
   for r in rows:
    if not isinstance(r,dict) or r.get('detailGroup','Original') not in ('Original','1',1):continue
@@ -78,11 +86,14 @@ class PartKom:
    maker=r.get('makerId');provider=r.get('providerId');placement=r.get('placementId','')
    if maker is None or provider is None:continue
    minimum=max(1,as_int(r.get('minQuantity'),1))
+   require_rub(r.get('currency'))
+   if 'price' not in r:raise MalformedResponseError('PartKom missing price')
    found.append(Offer(self.code,f'{maker}:{normalize_article(a)}:{provider}:{placement}',b,a,dec(r['price']),as_int(r.get('quantity')),
      as_int(r.get('guaranteedDays'),as_int(r.get('expectedDays'))),str(provider),str(placement),minimum,1,
      {'maker_id':str(maker),'provider_id':str(provider),'placement_id':str(placement),'success_percent':r.get('statSuccessPercent'),'pack_multiple_unverified':True}))
   return found
 
+@protected_search
 class Forum:
  code='forum-auto'
  async def search(self,brand,article,config=None):
@@ -93,29 +104,23 @@ class Forum:
   response=await cli.get('https://api.forum-auto.ru/v2/listgoods',
     params={'login':s.forum_login,'pass':s.forum_password,'art':article,'br':brand,'cross':0},
     timeout=httpx.Timeout(14,connect=3))
-  response.raise_for_status();rows=response.json()
-  if not isinstance(rows,list):raise Unavailable('Forum-Auto unexpected data')
+  classify_http(response)
+  try:rows=json.loads(response.content, parse_float=Decimal)
+  except (ValueError, TypeError) as exc:raise MalformedResponseError('Invalid supplier JSON response') from exc
+  if not isinstance(rows,list):raise MalformedResponseError('Forum-Auto unexpected data')
   found=[]
   for r in rows:
    if not isinstance(r,dict) or not r.get('gid'):continue
    b=str(r.get('brand',''));a=str(r.get('art',''))
    if normalize_brand(b)!=normalize_brand(brand) or normalize_article(a)!=normalize_article(article):continue
    multiple=max(1,as_int(r.get('kr'),1))
+   require_rub(r.get('currency'))
+   if 'price' not in r:raise MalformedResponseError('Forum-Auto missing price')
    found.append(Offer(self.code,str(r['gid']),b,a,dec(r['price']),as_int(r.get('num')),as_int(r.get('d_deliv')),
       str(r['gid']),str(r.get('whse','')),multiple,multiple,{'returnable':bool(as_int(r.get('is_returnable'),0))}))
   return found
 
-def require_rub(currency: str) -> None:
- """A supplier price must have an explicitly supported currency.
-
- ADEO price is documented in `currency` (for example `руб`). An unknown
- currency MUST be an error, not an empty or RUB-typed offer.
- """
- currency = str(currency or '').strip().casefold()
- if currency not in ('руб', 'руб.', 'rub', 'rur', 'rubles', 'рубли', '₽', '643'):
-  raise Unavailable('ADEO price currency is not confirmed as RUB')
-
-
+@protected_search
 class Adeo:
  code='adeo'
  async def search(self,brand,article,config=None):
@@ -126,16 +131,20 @@ class Adeo:
   cli=get_client()
   response=await cli.post('https://xml.adeo.pro/pricedetals2.php',
     data={'xml':ET.tostring(root,encoding='unicode')},timeout=httpx.Timeout(20,connect=3))
-  response.raise_for_status()
+  classify_http(response)
   if len(response.content)>2_000_000:raise Unavailable('Adeo XML too large')
   from defusedxml.ElementTree import fromstring
-  rows=fromstring(response.content).findall('.//detail');found=[]
+  try:rows=fromstring(response.content).findall('.//detail')
+  except Exception as exc:
+   raise MalformedResponseError('Invalid ADEO XML response') from exc
+  found=[]
   for node in rows:
    r={child.tag:(child.text or '') for child in node}
    b=r.get('producer','');a=r.get('code','')
    if normalize_brand(b)!=normalize_brand(brand) or normalize_article(a)!=normalize_article(article):continue
    if not r.get('b_id'):continue
    require_rub(r.get('currency'))
+   if 'price' not in r:raise MalformedResponseError('ADEO missing price')
    multi=max(1,as_int(r.get('minOrderCount'),1))
    key=f"{r.get('id','')}:{r.get('cella_id','')}:{r.get('n_file','')}"
    qty,stock_meta=parse_adeo_stock(r.get('rest'))
@@ -144,6 +153,7 @@ class Adeo:
       {'refusal_percent':r.get('PercentRefuse'),'delivery_min_days':as_int(r.get('deliverydays')), 'delivery_max_days':as_int(r.get('delivery')),'currency':'RUB',**stock_meta}))
   return found
 
+@protected_search
 class Rossko:
  code='rossko'
  async def search(self,brand,article,config=None):
@@ -152,18 +162,21 @@ class Rossko:
    raise Unavailable('ROSSKO SOAP credentials/delivery not configured')
   # WSDL-defined SOAP binding avoids hand-crafted requests. Until confirmed on an
   # account, leave SUPPLIER_API_ENABLED=false; NEVER call GetCheckout here.
-  from zeep import AsyncClient
-  from zeep.transports import AsyncTransport
   from zeep.helpers import serialize_object
-  import httpx
+  from app.modules.offer_engine.soap_client import rossko_client
   wsdl='https://api.rossko.ru/service/v2.1/GetSearch?wsdl'
-  async with httpx.AsyncClient(timeout=httpx.Timeout(18,connect=4)) as http_client:
-   transport=AsyncTransport(client=http_client,wsdl_client=httpx.Client(timeout=6))
-   client=AsyncClient(wsdl,transport=transport)
-   params={'KEY1':s.rossko_key1,'KEY2':s.rossko_key2,'text':f'{brand} {article}','delivery_id':s.rossko_delivery_id}
-   if s.rossko_address_id:params['address_id']=s.rossko_address_id
-   try:raw=await client.service.GetSearch(**params)
-   except Exception as exc:raise Unavailable('ROSSKO SOAP GetSearch failed') from exc
+  # Shared Zeep WSDL/client: credentials stay in each call, never cached.
+  try:
+   client=rossko_client(wsdl)
+  except Exception as exc:
+   raise NetworkError('ROSSKO WSDL unavailable') from None
+  params={'KEY1':s.rossko_key1,'KEY2':s.rossko_key2,'text':f'{brand} {article}','delivery_id':s.rossko_delivery_id}
+  if s.rossko_address_id:params['address_id']=s.rossko_address_id
+  try:raw=await client.service.GetSearch(**params)
+  except Exception as exc:
+   from zeep.exceptions import Fault
+   if isinstance(exc, Fault):raise UpstreamBusinessError('ROSSKO SOAP business fault') from None
+   raise NetworkError('ROSSKO SOAP GetSearch failed') from None
   obj=serialize_object(raw,target_cls=dict)
   return parse_rossko_search_result(obj,brand,article)
 
@@ -175,19 +188,19 @@ def parse_rossko_search_result(obj,brand,article):
   accepting only the capitalized SOAP alias ``Success`` would silently treat every
   successful result as an empty search (cache status=empty).
   """
-  if not isinstance(obj,dict):raise Unavailable('Unexpected ROSSKO SOAP result')
+  if not isinstance(obj,dict):raise MalformedResponseError('Unexpected ROSSKO SOAP result')
   obj=obj.get('SearchResult',obj)
-  if not isinstance(obj,dict):raise Unavailable('Unexpected ROSSKO SearchResult')
+  if not isinstance(obj,dict):raise MalformedResponseError('Unexpected ROSSKO SearchResult')
   success=obj.get('success',obj.get('Success',''))
   if str(success).strip().lower() not in ('true','1'):
    # A failed upstream request must never enter the negative availability cache.
-   raise Unavailable('ROSSKO GetSearch returned non-success status')
+   raise UpstreamBusinessError('ROSSKO GetSearch returned non-success status')
   parts=obj.get('PartsList')
   if parts is None:parts={}
-  if not isinstance(parts,dict):raise Unavailable('ROSSKO PartsList invalid')
+  if not isinstance(parts,dict):raise MalformedResponseError('ROSSKO PartsList invalid')
   entries=parts.get('Part') or []
   if isinstance(entries,dict):entries=[entries]
-  if not isinstance(entries,list):raise Unavailable('ROSSKO Part entries invalid')
+  if not isinstance(entries,list):raise MalformedResponseError('ROSSKO Part entries invalid')
   result=[]
   for part in entries:
    if not isinstance(part,dict):continue
@@ -195,17 +208,20 @@ def parse_rossko_search_result(obj,brand,article):
    if normalize_brand(b)!=normalize_brand(brand) or normalize_article(a)!=normalize_article(article):continue
    stocks=(part.get('stocks') or {}).get('stock') or []
    if isinstance(stocks,dict):stocks=[stocks]
-   if not isinstance(stocks,list):raise Unavailable('ROSSKO stock entries invalid')
+   if not isinstance(stocks,list):raise MalformedResponseError('ROSSKO stock entries invalid')
    for stock in stocks:
     if not isinstance(stock,dict):continue
     stock_id=str(stock.get('id',''));guid=str(part.get('guid',''))
     if not stock_id or not guid:continue
     multiple=max(1,as_int(stock.get('multiplicity'),1))
+    require_rub(stock.get('currency') or part.get('currency'))
     result.append(Offer('rossko',f'{guid}:{stock_id}',b,a,dec(stock.get('price')),
      as_int(stock.get('count')),as_int(stock.get('delivery')),f'{guid}:{stock_id}',stock_id,multiple,multiple,
      {'stock_type':stock.get('type'),'extra_days':stock.get('extra')}))
   return result
 
+# The registry is the single live source of adapters. External order writes are
+# not part of these read adapters and require the separately audited procurement boundary.
 PROVIDERS={'partkom':PartKom(),'forum-auto':Forum(),'adeo':Adeo(),'rossko':Rossko()}
 async def verify(code,key,brand,article,quantity):
  if code not in PROVIDERS:raise Unavailable('Unknown supplier')
@@ -214,3 +230,9 @@ async def verify(code,key,brand,article,quantity):
  if not offer or offer.qty is None or offer.qty<quantity or quantity<offer.minimum or quantity%offer.multiple:
   raise Unavailable('Selected offer is unavailable or quantity violates packaging rules')
  return offer
+
+
+def get_adapter(supplier_code: str):
+ """Single registry/factory for verified supplier READ adapters."""
+ try:return PROVIDERS[supplier_code]
+ except KeyError as exc:raise UpstreamBusinessError('Unknown supplier code') from exc

@@ -32,7 +32,7 @@ def test_invalid_price_input(price, markup):
 
 @pytest.mark.asyncio
 async def test_rossko_adapter_fails_closed():
-    with pytest.raises(NotImplementedError, match="verified API schema"):
+    with pytest.raises(Exception, match="ROSSKO SOAP credentials/delivery not configured"):
         await RosskoAdapter().search("BOSCH", "0986479088")
 
 

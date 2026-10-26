@@ -1,4 +1,4 @@
-"""Regression: ROSSKO real SOAP uses lowercase success, not Success."""
+"""Regression: SOAP success case; synthetic RUB-annotated fixture for strict currency."""
 from decimal import Decimal
 import pytest
 from app.modules.offer_engine.providers import parse_rossko_search_result, Unavailable
@@ -12,13 +12,13 @@ def fixture():
         "PartsList": {"Part": [
             {"guid": "PART-CF705", "brand": "Trialli", "partnumber": "CF 705",
              "stocks": {"stock": [
-                 {"id": "WH1", "price": "492.27", "count": 4, "delivery": 0, "extra": 1, "multiplicity": 1},
-                 {"id": "WH2", "price": "492.27", "count": 107, "delivery": 1, "extra": 0, "multiplicity": 1},
-                 {"id": "WH3", "price": "492.27", "count": 971, "delivery": 1, "extra": 0, "multiplicity": 1},
-                 {"id": "WH4", "price": "492.27", "count": 288, "delivery": 2, "extra": 0, "multiplicity": 1},
+                 {"id": "WH1", "price": "492.27", "currency": "RUB", "count": 4, "delivery": 0, "extra": 1, "multiplicity": 1},
+                 {"id": "WH2", "price": "492.27", "currency": "RUB", "count": 107, "delivery": 1, "extra": 0, "multiplicity": 1},
+                 {"id": "WH3", "price": "492.27", "currency": "RUB", "count": 971, "delivery": 1, "extra": 0, "multiplicity": 1},
+                 {"id": "WH4", "price": "492.27", "currency": "RUB", "count": 288, "delivery": 2, "extra": 0, "multiplicity": 1},
              ]}},
             {"guid": "PART-CC705", "brand": "Trialli", "partnumber": "CC 705",
-             "stocks": {"stock": [{"id": "CROSS", "price": "3765", "count": 1, "delivery": 1}]}},
+             "stocks": {"stock": [{"id": "CROSS", "price": "3765", "currency": "RUB", "count": 1, "delivery": 1}]}},
         ]}
     }
 

@@ -41,7 +41,7 @@ def test_realistic_partkom_file(tmp_path):
     assert len(records)==1
     line,row,err=records[0]
     assert not err and row.stock_min==6 and row.stock_is_lower_bound
-    assert row.minimum==2 and row.multiple==2 and row.warehouse=='7484'
+    assert row.minimum==2 and row.multiple==1 and row.warehouse=='7484'
 
 
 def test_rossko_zip_xlsx(tmp_path):

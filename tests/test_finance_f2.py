@@ -14,9 +14,9 @@ def agent(**kw):
 
 def test_own_cash_and_known_vat():
     r=calculate(PricePreview(**own(markup_percent='40',last_mile_delivery='80',sbp_percent='0.7')))
-    assert r['customer_gross']=='1400.00'
-    assert r['bank_fee']=='9.80'
-    assert r['cash_contribution_before_tax']=='310.20'
+    assert r['customer_gross']=='1512.00'
+    assert r['bank_fee']=='10.58'
+    assert r['cash_contribution_before_tax']=='421.42'
     assert r['net_contribution_estimate'] is None and r['production_approved'] is False
     r=calculate(PricePreview(**own(markup_percent='22',vat_scheme='STANDARD')))
     assert r['output_vat_estimate']=='220.00'

@@ -10,8 +10,15 @@ from app.modules.accounts.models import User
 from app.modules.commerce.models import Order,OrderLine,Procurement,Job
 from app.modules.payments.models import Payment,Refund
 from app.core.security import require_admin
-from app.modules.payments.gateway import gateway,GatewayError
+from app.modules.payments.gateway import gateway,GatewayError, money as rub_money
 router=APIRouter(prefix='/api/v1/payments',tags=['sbp-payments'])
+
+def _matches_money(remote_value, expected):
+ try:
+  return Decimal(rub_money(remote_value)) == expected
+ except GatewayError:
+  return False
+
 async def verify_remote(db,payment):
  if not payment.provider_id:raise HTTPException(409,'Payment ID not recorded')
  try:remote=await gateway().status(payment.provider_id)
@@ -21,7 +28,7 @@ async def verify_remote(db,payment):
      remote['metadata'].get('order_id')!=str(payment.order_id)):
   raise HTTPException(409,'Payment identity mismatch')
  amount=remote.get('amount',{})
- if amount.get('currency')!='RUB' or Decimal(str(amount.get('value','0')))!=payment.amount:raise HTTPException(409,'Payment amount mismatch')
+ if amount.get('currency')!='RUB' or not _matches_money(amount.get('value'),payment.amount):raise HTTPException(409,'Payment amount mismatch')
  # Serialize concurrent webhook processing; repeated notifications must not duplicate procurement.
  payment=await db.scalar(select(Payment).where(Payment.id==payment.id).with_for_update())
  order=await db.get(Order,payment.order_id)
@@ -56,6 +63,8 @@ async def verify_remote(db,payment):
  return {'order_id':str(order.id),'payment_status':payment.status,'order_status':order.status}
 @router.post('/yookassa/webhook')
 async def webhook(body:dict,db:AsyncSession=Depends(get_session)):
+ if body.get('type') != 'notification' or body.get('event') not in ('payment.succeeded','payment.canceled','payment.waiting_for_capture'):
+  raise HTTPException(400,'Unsupported YooKassa notification')
  obj=body.get('object')
  pid=obj.get('id') if isinstance(obj,dict) else None
  if not isinstance(pid,str) or len(pid)>150:return {'received':True}
@@ -124,7 +133,7 @@ async def reconcile_refund(refund_id:UUID,db:AsyncSession=Depends(get_session)):
     if (remote.get('id')!=ref.provider_id or not payment or
         remote.get('payment_id')!=payment.provider_id or
         amount.get('currency')!='RUB' or
-        Decimal(str(amount.get('value','0')))!=ref.amount):
+        not _matches_money(amount.get('value'),ref.amount)):
         raise HTTPException(409,'Refund identity or amount mismatch')
     state=remote.get('status')
     if state not in ('succeeded','pending','canceled'):

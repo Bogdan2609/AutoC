@@ -40,7 +40,7 @@ async def queue_sync(db,batch_id):
 
 async def run_sync(db,sync_id:UUID,step:int):
     sync=await db.scalar(select(FeedCatalogSync).where(FeedCatalogSync.id==sync_id).with_for_update())
-    if not sync or sync.status in ('completed','failed','paused') or sync.step!=step:
+    if not sync or sync.status != 'queued' or sync.step!=step:
         return  # Ignore replay of old durable messages.
     try:
         if (await snapshot(db)).revision!=sync.taxonomy_revision:
@@ -54,6 +54,12 @@ async def run_sync(db,sync_id:UUID,step:int):
         other_sync=await db.scalar(select(FeedCatalogSync.id).where(
             FeedCatalogSync.id!=sync.id,FeedCatalogSync.status=='processing').limit(1))
         if busy or busy_multi or other_sync:
+            # Stop indefinite self-requeue; a human can resolve the blocked run.
+            if sync.step >= 60:
+                sync.status='failed'
+                sync.message='capacity_wait_retry_budget_exhausted'
+                await db.commit()
+                return
             sync.status='queued';sync.message='waiting_for_catalog_capacity';sync.step+=1
             db.add(Job(dedup_key=f'feed-catalog-sync:{sync.batch_id}:wait:{sync.step}',
                 kind='feed_catalog_sync',payload={'sync_id':str(sync.id),'step':sync.step},

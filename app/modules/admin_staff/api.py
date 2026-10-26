@@ -77,7 +77,7 @@ async def _session_staff(db: AsyncSession, raw: str):
 
 @router.post('/login')
 async def login(body: StaffLogin, request: Request, db: AsyncSession = Depends(get_session)):
-    email = str(body.email).lower()
+    email = str(body.email).strip().lower()
     await enforce_budget('staff_login_ip', peer_ip(request), limit=12, period=300)
     await enforce_budget('staff_login_user', email, limit=7, period=300)
     user = await db.scalar(select(User).where(User.email == email))
@@ -179,7 +179,7 @@ async def list_staff(db: AsyncSession = Depends(get_session)):
 @router.post('', status_code=201, dependencies=[Depends(require_admin)])
 async def create_staff(body: StaffCreate, db: AsyncSession = Depends(get_session)):
     encoded = await anyio.to_thread.run_sync(ph.hash, body.password, limiter=_hash_limiter)
-    user = User(email=str(body.email).casefold(), password_hash=encoded,
+    user = User(email=str(body.email).strip().lower(), password_hash=encoded,
                 display_name=body.display_name.strip(), is_active=True)
     db.add(user)
     try:

@@ -30,8 +30,11 @@ async def add_seller_line(body, user, db):
         chosen,validated_snapshot=await validate_for_cart(db,offer,body.pickup_node_id,body.quantity)
     else:
         opts=await options_for_offer(db,offer,body.pickup_node_id)
-        if not opts or max(x['stock'] for x in opts)<body.quantity:
+        if not any(isinstance(x, dict) and isinstance(x.get('stock'), int) and
+                   x['stock'] >= body.quantity for x in (opts or [])):
             raise HTTPException(409,'Insufficient stock or no configured pickup route')
+    # open_cart takes a stable User row FOR UPDATE, serializing cart writes.
+    # Do not hold this lock during a live supplier HTTP verification.
     cart=await open_cart(db,user)
     line=await db.scalar(select(CartLine).where(
         CartLine.cart_id==cart.id,CartLine.seller_offer_id==offer.id,
@@ -48,7 +51,7 @@ async def add_seller_line(body, user, db):
     line.product_id=offer.product_id
     line.quoted_unit_retail=offer.price
     if offer.source_kind=='own_stock':
-        selected=next((x for x in opts if x['stock']>=body.quantity),None)
+        selected=next(x for x in opts if isinstance(x,dict) and isinstance(x.get('stock'),int) and x['stock']>=body.quantity)
         line.quote_metadata={'source_kind':'own_stock','origin_node_id':selected['node_id'],
                              'route_node_ids':selected['route_node_ids'],
                              'merchant_delivery_fee':selected['fee']}
@@ -91,7 +94,7 @@ async def preview(user:User=Depends(current_user),db:AsyncSession=Depends(get_se
                           line.quantity%int(x.get('pack_multiple') or 1)==0 for x in opts))
                 else:
                     opts=await options_for_offer(db,offer,line.fulfillment_node_id)
-                    valid=bool(opts and max(x['stock'] for x in opts)>=line.quantity)
+                    valid=any(isinstance(x,dict) and isinstance(x.get('stock'),int) and x['stock']>=line.quantity for x in (opts or []))
                 total += offer.price*line.quantity
                 results.append({'line_id':str(line.id),'seller_offer_id':str(offer.id),
                                 'quantity':line.quantity,'unit_price':str(offer.price),
