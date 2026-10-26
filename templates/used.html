@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block body %}
+<div class="page-head"><span class="eyebrow">Б/У ЗАПЧАСТИ</span><h1>{{ used.title }}</h1><p>Отдельный экземпляр с индивидуальным состоянием и остатком.</p></div>
+<section class="marketplace-section"><div class="product-description"><h2>Состояние: {{ used.condition }}</h2><p>{{ used.description }}</p><p>Дефекты: {{ used.defects or 'Не указаны' }}</p><p>Пробег: {{ used.mileage_km if used.mileage_km is not none else 'не указан' }}</p><p>Происхождение: {{ used.origin_note or 'не указано' }}</p>{% if original %}<p>Основной товар: <a href="/product/{{ original.slug }}">{{ original.name }}</a></p>{% endif %}</div>
+{% for photo in used.photos %}<a rel="noopener noreferrer" target="_blank" href="{{ photo }}">Фотография {{ loop.index }}</a>{% endfor %}
+{% for row in available %}<div class="offer-row"><strong>{{ row.offer.price }} ₽</strong><small>Наличие: {{ row.options[0].stock }} шт., {{ row.options[0].city }}</small><small>Выберите ПВЗ для заказа. Оплата в тестовом контуре выключена.</small></div>{% else %}<div class="alert info">Нет доступных предложений</div>{% endfor %}
+</section>{% endblock %}

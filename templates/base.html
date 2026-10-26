@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>{{ seo_title or title }} | Autoparts</title>
+  {% if seo_description %}<meta name="description" content="{{ seo_description }}">{% endif %}
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  <link rel="stylesheet" href="/static/site.css?v=016">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('ap-theme')==='dark'?'dark':'light'}catch(e){}</script>
+</head>
+<body>
+<div class="announcement"><div class="container">AUTOPARTS <span class="divider-dot">·</span> Подбор запчастей по артикулу <span class="dev-label">ТЕСТОВЫЙ КОНТУР — ПОКУПКИ ОТКЛЮЧЕНЫ</span></div></div>
+<header class="site-header"><div class="container header-inner">
+  <a href="/" class="brand" aria-label="Autoparts — главная"><span class="brand-mark">A<span>.</span></span><span class="brand-text">AUTOPARTS<small>запчасти без лишних поисков</small></span></a>
+  <nav class="nav-links" aria-label="Основная навигация"><a href="/catalog">Каталог</a><a href="/orders">Мои заказы</a><a href="/seller">Продавцам</a></nav>
+  <div class="header-actions"><button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему" title="Светлая / тёмная тема">◐</button>
+  <a class="nav-action" href="/cart" aria-label="Корзина">▤ <span>Корзина</span></a>
+  {% if user %}<a class="nav-action nav-action-primary" href="/account">◉ <span>Кабинет</span></a>{% else %}<a class="nav-action nav-action-primary" href="/login">Войти ↗</a>{% endif %}
+  </div>
+</div></header>
+<main class="container page-shell">
+{% if request.query_params.get('message')=='offer-unavailable' %}<div class="alert warning" role="alert">Предложение недоступно или его условия изменились. Выберите другой вариант.</div>{% elif request.query_params.get('message')=='payment-check-failed' %}<div class="alert warning" role="alert">Не удалось проверить платёж. Попробуйте позже.</div>{% elif request.query_params.get('message')=='replacement-failed' %}<div class="alert warning" role="alert">Решение по замене пока не обработано. Обновите заказ.</div>{% elif request.query_params.get('message')=='invalid-address' %}<div class="alert warning" role="alert">Проверьте данные адреса.</div>{% endif %}
+{% block body %}{% endblock %}
+</main>
+<footer class="site-footer"><div class="container footer-inner"><div><strong>AUTOPARTS</strong><p>Подбор деталей по артикулу и предложениям поставщиков.</p></div><div class="footer-meta">Версия 0.16.0 · Тестовая среда<br>Предложения требуют подтверждения до оплаты.</div></div></footer>
+<script>
+ document.getElementById('theme-toggle')?.addEventListener('click',()=>{let d=document.documentElement;let next=d.dataset.theme==='dark'?'light':'dark';d.dataset.theme=next;try{localStorage.setItem('ap-theme',next)}catch(e){}});
+ document.querySelectorAll('[data-address-choice]').forEach(el=>el.addEventListener('change',()=>{let target=document.querySelector('#shipping_address');if(target && el.value)target.value=el.value;}));
+</script>
+</body></html>

@@ -1,0 +1,35 @@
+"""Additive Finance F1 tax foundation: no modifications to existing commercial data.
+Revision ID: 20261020_0012
+Revises: 20261020_0011
+
+NOTE: static PostgreSQL DDL generated from F1 model definitions at release time.
+"""
+from alembic import op
+revision = '20261020_0012'
+down_revision = '20261020_0011'
+branch_labels = None
+depends_on = None
+
+def upgrade():
+    op.execute('CREATE TABLE finance_tax_classes (\n\tid UUID NOT NULL, \n\tcode VARCHAR(60) NOT NULL, \n\ttitle VARCHAR(180) NOT NULL, \n\tspecial_evidence_required BOOLEAN NOT NULL, \n\tCONSTRAINT pk_finance_tax_classes PRIMARY KEY (id), \n\tCONSTRAINT uq_fin_tax_class_code UNIQUE (code)\n);')
+    op.execute('CREATE TABLE finance_tax_rules (\n\tid UUID NOT NULL, \n\trule_code VARCHAR(80) NOT NULL, \n\tvalid_from DATE NOT NULL, \n\tvalid_until DATE, \n\tpayload JSON NOT NULL, \n\tsource_url VARCHAR(500) NOT NULL, \n\tverified BOOLEAN NOT NULL, \n\tCONSTRAINT pk_finance_tax_rules PRIMARY KEY (id), \n\tCONSTRAINT uq_fin_tax_rule_version UNIQUE (rule_code, valid_from), \n\tCONSTRAINT ck_finance_tax_rules_valid_dates CHECK (valid_until IS NULL OR valid_until >= valid_from)\n);')
+    op.execute("CREATE TABLE finance_legal_entities (\n\tid UUID NOT NULL, \n\tmerchant_id UUID, \n\tname VARCHAR(200) NOT NULL, \n\tentity_type VARCHAR(24) NOT NULL, \n\tinn VARCHAR(12), \n\tkpp VARCHAR(9), \n\tverification_status VARCHAR(16) NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tCONSTRAINT pk_finance_legal_entities PRIMARY KEY (id), \n\tCONSTRAINT ck_finance_legal_entities_entity_type CHECK (entity_type IN ('company','sole_proprietor','individual','self_employed')), \n\tCONSTRAINT ck_finance_legal_entities_verification CHECK (verification_status IN ('draft','verified','rejected')), \n\tCONSTRAINT ck_finance_legal_entities_inn_length CHECK (inn IS NULL OR length(inn) IN (10,12)), \n\tCONSTRAINT uq_finance_legal_entities_merchant_id UNIQUE (merchant_id), \n\tCONSTRAINT fk_finance_legal_entities_merchant_id_merchants FOREIGN KEY(merchant_id) REFERENCES merchants (id) ON DELETE RESTRICT, \n\tCONSTRAINT uq_finance_legal_entities_inn UNIQUE (inn)\n);")
+    op.execute("CREATE TABLE finance_entity_roles (\n\tid UUID NOT NULL, \n\tentity_id UUID NOT NULL, \n\trole VARCHAR(30) NOT NULL, \n\tCONSTRAINT pk_finance_entity_roles PRIMARY KEY (id), \n\tCONSTRAINT uq_fin_role UNIQUE (entity_id, role), \n\tCONSTRAINT ck_finance_entity_roles_role CHECK (role IN ('platform_owner','seller','procurement_buyer','supplier','payment_recipient')), \n\tCONSTRAINT fk_finance_entity_roles_entity_id_finance_legal_entities FOREIGN KEY(entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT\n);")
+    op.execute('CREATE TABLE finance_external_income (\n\tid UUID NOT NULL, \n\tentity_id UUID NOT NULL, \n\tyear INTEGER NOT NULL, \n\tamount NUMERIC(20, 2) NOT NULL, \n\tsource_reference VARCHAR(200) NOT NULL, \n\tverified BOOLEAN NOT NULL, \n\tCONSTRAINT pk_finance_external_income PRIMARY KEY (id), \n\tCONSTRAINT uq_fin_external_income_ref UNIQUE (entity_id, year, source_reference), \n\tCONSTRAINT ck_finance_external_income_amount_positive CHECK (amount >= 0), \n\tCONSTRAINT fk_finance_external_income_entity_id_finance_legal_entities FOREIGN KEY(entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT\n);')
+    op.execute("CREATE TABLE finance_sales_contracts (\n\tid UUID NOT NULL, \n\tseller_entity_id UUID NOT NULL, \n\tagent_entity_id UUID, \n\tsale_model VARCHAR(10) NOT NULL, \n\tdocument_reference VARCHAR(250) NOT NULL, \n\tvalid_from DATE NOT NULL, \n\tvalid_until DATE, \n\tCONSTRAINT pk_finance_sales_contracts PRIMARY KEY (id), \n\tCONSTRAINT ck_finance_sales_contracts_sale_model CHECK (sale_model IN ('OWN','AGENCY')), \n\tCONSTRAINT fk_fin_contract_seller FOREIGN KEY(seller_entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_fin_contract_agent FOREIGN KEY(agent_entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT\n);")
+    op.execute('CREATE TABLE finance_tax_audit_log (\n\tid UUID NOT NULL, \n\tentity_id UUID, \n\taction VARCHAR(80) NOT NULL, \n\tpayload JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tCONSTRAINT pk_finance_tax_audit_log PRIMARY KEY (id), \n\tCONSTRAINT fk_finance_tax_audit_log_entity_id_finance_legal_entities FOREIGN KEY(entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT\n);')
+    op.execute('CREATE INDEX ix_fin_tax_audit_created ON finance_tax_audit_log (created_at);')
+    op.execute("CREATE TABLE finance_tax_profiles (\n\tid UUID NOT NULL, \n\tentity_id UUID NOT NULL, \n\tvalid_from DATE NOT NULL, \n\tvalid_until DATE, \n\tregime VARCHAR(20) NOT NULL, \n\tvat_scheme VARCHAR(20) NOT NULL, \n\tstatus VARCHAR(12) NOT NULL, \n\tprior_year_income NUMERIC(20, 2), \n\tcurrent_year_income NUMERIC(20, 2), \n\texternal_income_confirmed BOOLEAN NOT NULL, \n\tevidence_reference VARCHAR(300), \n\tverified_by VARCHAR(100), \n\tactivated_at TIMESTAMP WITH TIME ZONE, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tCONSTRAINT pk_finance_tax_profiles PRIMARY KEY (id), \n\tCONSTRAINT uq_fin_profile_entity_start UNIQUE (entity_id, valid_from), \n\tCONSTRAINT ck_finance_tax_profiles_valid_dates CHECK (valid_until IS NULL OR valid_until >= valid_from), \n\tCONSTRAINT ck_finance_tax_profiles_status CHECK (status IN ('draft','active','retired')), \n\tCONSTRAINT ck_finance_tax_profiles_regime CHECK (regime IN ('OSNO','USN_INCOME','USN_PROFIT','AUSN_INCOME','AUSN_PROFIT')), \n\tCONSTRAINT ck_finance_tax_profiles_vat_scheme CHECK (vat_scheme IN ('STANDARD','USN_5','USN_7','EXEMPT','UNRESOLVED')), \n\tCONSTRAINT fk_finance_tax_profiles_entity_id_finance_legal_entities FOREIGN KEY(entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT\n);")
+    op.execute('CREATE INDEX ix_finance_tax_profiles_entity_id ON finance_tax_profiles (entity_id);')
+    op.execute('CREATE TABLE finance_tax_evaluations (\n\tid UUID NOT NULL, \n\tentity_id UUID NOT NULL, \n\tprofile_id UUID NOT NULL, \n\tidempotency_key VARCHAR(160) NOT NULL, \n\tevent_kind VARCHAR(30) NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tCONSTRAINT pk_finance_tax_evaluations PRIMARY KEY (id), \n\tCONSTRAINT uq_fin_tax_eval_key UNIQUE (idempotency_key), \n\tCONSTRAINT fk_finance_tax_evaluations_entity_id_finance_legal_entities FOREIGN KEY(entity_id) REFERENCES finance_legal_entities (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_finance_tax_evaluations_profile_id_finance_tax_profiles FOREIGN KEY(profile_id) REFERENCES finance_tax_profiles (id) ON DELETE RESTRICT\n);')
+
+def downgrade():
+    op.drop_table('finance_tax_evaluations')
+    op.drop_table('finance_tax_profiles')
+    op.drop_table('finance_tax_audit_log')
+    op.drop_table('finance_sales_contracts')
+    op.drop_table('finance_external_income')
+    op.drop_table('finance_entity_roles')
+    op.drop_table('finance_legal_entities')
+    op.drop_table('finance_tax_rules')
+    op.drop_table('finance_tax_classes')

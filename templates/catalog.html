@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block body %}
+<section class="hero">
+  <div class="hero-copy"><span class="eyebrow"><span class="signal"></span> ПОИСК АВТОЗАПЧАСТЕЙ</span>
+  <h1>Детали для дела.<br><em>Ничего лишнего.</em></h1>
+  <p>Находите нужную запчасть по артикулу или названию. Сравнивайте сохранённые предложения и сроки поставки в одном месте.</p>
+  <form class="search" action="/catalog" method="get" role="search"><label class="sr-only" for="catalog-query">Поиск товара</label><span class="search-icon">⌕</span><input id="catalog-query" type="search" name="q" value="{{ q }}" maxlength="110" placeholder="Артикул, бренд или название детали" autofocus><button class="btn primary" type="submit">Найти <span aria-hidden="true">↗</span></button></form>
+  <div class="search-caption">Например: BOSCH 0986479088 — точный поиск проверит поставщиков. Поиск по названию использует наш каталог.</div>
+<form class="exact-supplier-search" action="/catalog" method="get" role="search">
+<label>Бренд <input type="text" name="brand_name" value="{{ discovery.brand if discovery else '' }}" placeholder="BOSCH" required minlength="2" maxlength="60"></label>
+<label>Артикул <input type="text" name="article" value="{{ discovery.article if discovery else '' }}" placeholder="0986479088" required minlength="4" maxlength="70"></label>
+<button class="btn secondary" type="submit">Найти у поставщиков ↗</button>
+</form></div>
+  <div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-disc"><div class="art-center"></div></div><span class="art-label">PARTS<br>ENGINE</span><div class="art-spark spark-one">+</div><div class="art-spark spark-two">+</div></div>
+</section>
+<section class="benefits"><div><span>01</span><strong>Единый каталог</strong><small>Товары и артикулы</small></div><div><span>02</span><strong>Несколько поставщиков</strong><small>Цены и сроки рядом</small></div><div><span>03</span><strong>Проверка наличия</strong><small>Перед оформлением заказа</small></div></section>
+{% if discovery_error %}<div class="alert warning" role="alert">{{ discovery_error }}</div>{% endif %}
+{% if discovery %}
+<div class="discovery-status" id="supplier-discovery" data-brand="{{ discovery.brand }}" data-article="{{ discovery.article }}" aria-live="polite">
+<strong>Проверка предложений: {{ discovery.brand }} {{ discovery.article }}</strong>
+<p>Поиск выполняется отдельно от страницы. Повторные запросы по тому же артикулу подавляются кэшем. Заказы поставщикам не отправляются.</p>
+<ul id="discovery-providers">{% for p in discovery.suppliers %}<li>{{ p.supplier }} — {{ p.status }}{% if p.offers %} ({{ p.offers }} предложений){% endif %}</li>{% endfor %}</ul>
+{% if discovery.product_url %}<a class="btn primary" href="{{ discovery.product_url }}">Открыть найденный товар</a>{% endif %}
+</div>
+<script src="/static/discovery.js?v=06" defer></script>
+{% endif %}
+<section class="catalog-section"><div class="section-heading"><div><span class="eyebrow muted-kicker">КАТАЛОГ</span><h2>{% if q %}Результаты по запросу «{{ q }}»{% else %}Ассортимент{% endif %}</h2></div><span class="result-count">{{ count }} позиций</span></div>
+{% if visible_categories %}<nav class="catalog-categories" aria-label="Категории товаров" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px;">
+{% for c in visible_categories %}<a class="btn secondary" href="/category/{{ c.slug }}">{{ c.name }}</a>{% endfor %}
+</nav>{% endif %}
+<form class="catalog-filter" method="get" action="/catalog" aria-label="Фильтр по производителю">
+  <input type="hidden" name="q" value="{{ q }}">
+  <label for="brand-filter">Производитель</label>
+  <select id="brand-filter" name="brand">
+    <option value="">Все бренды</option>
+    {% for b in brands %}<option value="{{ b.slug }}" {% if brand == b.slug %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn secondary">Применить</button>
+  {% if brand %}<a href="/catalog?q={{ q|urlencode }}" class="btn secondary">Сбросить</a>{% endif %}
+</form>
+<div class="products">{% for product in products %}<a class="product" href="/product/{{ product.slug }}"><div class="product-icon"><span class="product-gear">⚙</span><small>AP</small></div><div class="product-info"><span class="product-type">АРТИКУЛ {{ product.article }}</span><h3>{{ product.name }}</h3><p>Перейти к предложениям поставщиков</p></div><span class="product-link" aria-hidden="true">↗</span></a>{% else %}<div class="empty"><span class="empty-icon">⌕</span><strong>Товары не найдены</strong><p>Попробуйте другой запрос. Уточните бренд и артикул. При подключённых поставщиках мы проверим их в фоне и создадим карточку только при точном совпадении.</p><a href="/catalog" class="btn secondary">Все товары</a></div>{% endfor %}</div>
+{% if count > per_page %}
+<nav class="catalog-pagination" aria-label="Страницы каталога">
+  {% if page > 1 %}<a class="btn secondary" rel="prev" href="/catalog?q={{ q|urlencode }}&brand={{ brand|urlencode }}&page={{ page - 1 }}">← Назад</a>{% endif %}
+  <span>Страница {{ page }} из {{ (count + per_page - 1) // per_page }}</span>
+  {% if page * per_page < count %}<a class="btn secondary" rel="next" href="/catalog?q={{ q|urlencode }}&brand={{ brand|urlencode }}&page={{ page + 1 }}">Вперёд →</a>{% endif %}
+</nav>
+{% endif %}
+</section>
+{% endblock %}

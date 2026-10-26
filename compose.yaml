@@ -1,0 +1,97 @@
+services:
+  db:
+    image: postgres:18.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: autoparts
+      POSTGRES_USER: autoparts
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoparts_local}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoparts -d autoparts"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:8.10.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  migrate:
+    build: .
+    env_file: .env
+    environment: &app_env
+      DATABASE_URL: postgresql+psycopg://autoparts:${POSTGRES_PASSWORD:-autoparts_local}@db:5432/autoparts
+      REDIS_URL: redis://redis:6379/0
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      APP_ENV: ${APP_ENV:-development}
+      MARKETPLACE_DEMO_MODE: ${MARKETPLACE_DEMO_MODE:-false}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      BROWSER_CSRF_SECRET: ${BROWSER_CSRF_SECRET:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      OFFER_MAX_AGE_SECONDS: ${OFFER_MAX_AGE_SECONDS:-900}
+      SUPPLIER_API_ENABLED: ${SUPPLIER_API_ENABLED:-false}
+      SUPPLIER_PROCUREMENT_ENABLED: ${SUPPLIER_PROCUREMENT_ENABLED:-false}
+      DISCOVERY_IP_PER_MINUTE: ${DISCOVERY_IP_PER_MINUTE:-6}
+      DISCOVERY_IP_PER_HOUR: ${DISCOVERY_IP_PER_HOUR:-30}
+      DISCOVERY_GLOBAL_PER_MINUTE: ${DISCOVERY_GLOBAL_PER_MINUTE:-90}
+      DISCOVERY_MAX_PENDING_JOBS: ${DISCOVERY_MAX_PENDING_JOBS:-200}
+      SUPPLIER_REQUESTS_PER_HOUR: ${SUPPLIER_REQUESTS_PER_HOUR:-60}
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      YOOKASSA_VAT_CODE: ${YOOKASSA_VAT_CODE:-0}
+      PARTKOM_LOGIN: ${PARTKOM_LOGIN:-}
+      PARTKOM_PASSWORD: ${PARTKOM_PASSWORD:-}
+      ADEO_LOGIN: ${ADEO_LOGIN:-}
+      ADEO_PASSWORD: ${ADEO_PASSWORD:-}
+      FORUM_LOGIN: ${FORUM_LOGIN:-}
+      FORUM_PASSWORD: ${FORUM_PASSWORD:-}
+      ROSSKO_KEY1: ${ROSSKO_KEY1:-}
+      ROSSKO_KEY2: ${ROSSKO_KEY2:-}
+      ROSSKO_DELIVERY_ID: ${ROSSKO_DELIVERY_ID:-}
+      ROSSKO_ADDRESS_ID: ${ROSSKO_ADDRESS_ID:-}
+    command: ["uv", "run", "--no-dev", "--no-sync", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+  web:
+    volumes:
+      - catalog_media:/srv/app/media
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    environment: *app_env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/live',timeout=2)"]
+      interval: 20s
+      timeout: 5s
+      retries: 4
+  worker:
+    volumes:
+      - catalog_media:/srv/app/media
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    environment: *app_env
+    command: ["uv", "run", "--no-dev", "--no-sync", "python", "-m", "app.workers.runner"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+volumes:
+  catalog_media:
+  postgres_data:

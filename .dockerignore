@@ -1,0 +1,10 @@
+.venv
+.env
+.git
+.pytest_cache
+__pycache__
+*.sqlite3
+*.db
+admin-ui/node_modules
+admin-ui/dist
+admin-ui/.vite

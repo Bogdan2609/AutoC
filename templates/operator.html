@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#f6f8fc">
+<title>Autoparts · Центр управления</title>
+<link rel="stylesheet" href="/static/operator.css?v=0332">
+<link rel="stylesheet" href="/static/catalog_editor.css?v=0236">
+<script defer src="/static/catalog_editor.js?v=0236"></script>
+<script defer src="/static/operator.js?v=0332"></script>
+</head>
+<body>
+<div id="login" class="auth-screen">
+  <div class="auth-card">
+    <div class="logo large"><span class="logo-mark">A<span>+</span></span><span>autoparts<span class="logo-muted"> / control</span></span></div>
+    <div class="auth-label">ОПЕРАЦИОННАЯ ПАНЕЛЬ</div>
+    <h1>Управляйте всем<br>в одном месте.</h1>
+    <p>Магазины, поставщики, остатки, ПВЗ и заказы. Администраторские данные доступны только после авторизации.</p>
+    <form id="login-form">
+      <label class="field-label" for="token">Административный токен</label>
+      <div class="password-field"><input id="token" type="password" autocomplete="off" required placeholder="Введите X-Admin-Token"><button type="button" id="toggle-token" class="icon-button" aria-label="Показать пароль">◉</button></div>
+      <button type="submit" class="primary wide">Войти в панель <span>→</span></button>
+    </form>
+    <p class="auth-foot">Токен используется только в памяти этой вкладки и не сохраняется в браузере.</p>
+    <p class="danger-text" id="auth-error" role="alert"></p>
+  </div>
+  <div class="auth-art"><div class="art-grid"></div><div class="art-content"><span>MARKETPLACE FOUNDATION</span><strong>Один каталог.<br>Тысячи предложений.<br>Полный контроль.</strong><div class="art-pill">v0.33.2 · Operator Operations Console</div></div></div>
+</div>
+<div id="workspace" class="workspace hidden">
+  <div id="mobile-dimmer" class="mobile-dimmer"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand-row"><div class="logo"><span class="logo-mark">A<span>+</span></span><span>autoparts</span></div><span class="sidebar-version">v0.33.2</span></div>
+    <div class="space-label">WORKSPACE</div>
+    <nav id="nav" aria-label="Разделы управления">
+      <div class="nav-heading">Основное</div>
+      <button data-view="dashboard" class="nav-link active"><span class="nav-icon">▦</span>Обзор</button>
+      <button data-view="monitor" class="nav-link"><span class="nav-icon">◷</span>Центр контроля</button>
+      <button data-view="catalog" class="nav-link"><span class="nav-icon">◫</span>Каталог товаров</button>
+      <button data-view="catalog-automation" class="nav-link"><span class="nav-icon">↻</span>Автоматизация каталога</button>
+      <button data-view="ce-brands" class="nav-link"><span class="nav-icon">◉</span>Бренды</button>
+      <button data-view="ce-categories" class="nav-link"><span class="nav-icon">⋈</span>Категории</button>
+      <button data-view="ce-attributes" class="nav-link"><span class="nav-icon">☷</span>Характеристики</button>
+      <button data-view="ce-families" class="nav-link"><span class="nav-icon">⋇</span>Семейства</button>
+      <button data-view="offers" class="nav-link"><span class="nav-icon">▤</span>Предложения и цены</button>
+      <button data-view="inventory" class="nav-link"><span class="nav-icon">▥</span>Остатки</button>
+      <div class="nav-heading">Маркетплейс</div>
+      <button data-view="merchants" class="nav-link"><span class="nav-icon">♧</span>Продавцы</button>
+      <button data-view="stores" class="nav-link"><span class="nav-icon">▣</span>Магазины</button>
+      <button data-view="used" class="nav-link"><span class="nav-icon">◇</span>Б/у запчасти</button>
+      <div class="nav-heading">Логистика</div>
+      <button data-view="nodes" class="nav-link"><span class="nav-icon">⌂</span>Склады и ПВЗ</button>
+      <button data-view="routes" class="nav-link"><span class="nav-icon">⇄</span>Маршруты</button>
+      <div class="nav-heading">Интеграции</div>
+      <button data-view="supplier-feeds" class="nav-link"><span class="nav-icon">▤</span>Прайс-листы</button>
+      <button data-view="suppliers" class="nav-link"><span class="nav-icon">⬡</span>Поставщики</button>
+      <button data-view="accounts" class="nav-link"><span class="nav-icon">◈</span>API-аккаунты</button>
+      <button data-view="destinations" class="nav-link"><span class="nav-icon">⌾</span>Адреса поставок</button>
+      <button data-view="receiving-readiness" class="nav-link"><span class="nav-icon">✓</span>Готовность приёмки</button>
+      <div class="nav-heading">Финансы</div>
+      <button data-view="finance" class="nav-link"><span class="nav-icon">₽</span>Юрлица и налоги</button>
+      <button data-view="finance-pricing" class="nav-link"><span class="nav-icon">%</span>Наценки и комиссии</button>
+      <button data-view="finance-ledger" class="nav-link"><span class="nav-icon">≡</span>Журнал и взаиморасчёты</button>
+      <button data-view="finance-payments" class="nav-link"><span class="nav-icon">⇄</span>СБП, чеки и сверка (SHADOW)</button>
+      <button data-view="finance-registers" class="nav-link"><span class="nav-icon">▧</span>Налоговые регистры и экспорт (SHADOW)</button>
+      <div class="nav-heading">Аналитика</div>
+      <button data-view="analytics" class="nav-link"><span class="nav-icon">▥</span>Аналитика бизнеса (A3)</button>
+      <div class="nav-heading">Операции</div>
+      <button data-view="orders" class="nav-link"><span class="nav-icon">▧</span>Заказы</button>
+      <button data-view="jobs" class="nav-link"><span class="nav-icon">◷</span>Задания</button>
+      <button data-view="purchases" class="nav-link"><span class="nav-icon">↗</span>Закупки поставщиков</button>
+      <button data-view="refunds" class="nav-link"><span class="nav-icon">↶</span>Возвраты</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="mode-note"><span class="dot amber"></span><span>Настройки операций<br><small>Проверьте в разделе «Обзор»</small></span></div><button id="logout" class="logout">⇥ Выйти</button></div>
+  </aside>
+  <div class="app-main">
+    <header class="topbar">
+      <button id="menu-button" class="icon-button mobile-only" aria-label="Открыть меню">☰</button>
+      <div class="breadcrumb"><span>Autoparts Platform</span><b>/</b><strong id="crumb">Обзор</strong></div>
+      <div class="top-actions"><span class="mode-badge"><span class="dot green"></span>Статус в разделе «Обзор»</span><button id="refresh" class="secondary-button">↻ <span>Обновить</span></button></div>
+    </header>
+    <main class="content">
+      <div class="page-heading"><div><p class="eyebrow" id="eyebrow">ОПЕРАЦИОННАЯ СВОДКА</p><h1 id="page-title">Обзор платформы</h1><p class="page-subtitle" id="page-subtitle">Показатели, требующие внимания, и состояние системы.</p></div><div id="heading-actions"></div></div>
+      <div id="alert" aria-live="polite"></div>
+      <section id="result" aria-live="polite"></section>
+    </main>
+  </div>
+</div>
+<dialog id="modal" class="modal"><div class="modal-head"><div><h2 id="modal-title">Действие</h2><p id="modal-desc"></p></div><button id="modal-close" type="button" class="icon-button" aria-label="Закрыть">✕</button></div><form id="modal-form"><div id="modal-fields" class="form-grid"></div><div class="modal-footer"><button type="button" class="secondary-button" id="modal-cancel">Отмена</button><button type="submit" class="primary" id="modal-save">Сохранить</button></div></form></dialog>
+</body></html>

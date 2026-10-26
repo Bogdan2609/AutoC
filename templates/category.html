@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="catalog-section">
+  <p><a href="/catalog">Каталог</a> / <strong>{{ category.name }}</strong></p>
+  <div class="section-heading"><div><span class="eyebrow muted-kicker">КАТЕГОРИЯ</span><h1>{{ category.name }}</h1></div><span class="result-count">{{ count }} товаров</span></div>
+  <link rel="stylesheet" href="/static/category_facets.css?v=0233">
+  <div class="facet-layout">
+    <aside class="facet-sidebar" aria-label="Фильтры по характеристикам">
+      <h2>Фильтры</h2>
+      <form id="category-filter-form" method="get" action="/category/{{ category.slug }}">
+        {% for f in facets %}
+        <fieldset class="facet-group">
+          <legend>{{ f.name }}{% if f.unit %} ({{ f.unit }}){% endif %}</legend>
+          {% if f.data_type in ('integer','decimal') %}
+            <div class="facet-range"><label>От <input type="number" step="any" inputmode="decimal" data-facet-min="{{ f.code }}" placeholder="{{ f.min or '0' }}"></label><label>До <input type="number" step="any" inputmode="decimal" data-facet-max="{{ f.code }}" placeholder="{{ f.max or '0' }}"></label></div>
+          {% else %}
+            <select aria-label="{{ f.name }}" data-facet-select="{{ f.code }}">
+              <option value="">Любое</option>
+              {% for o in f.options %}<option value="{{ o.value }}">{{ 'Да' if o.value == True else 'Нет' if o.value == False else o.value }} ({{ o.count }})</option>{% endfor %}
+            </select>
+          {% endif %}
+        </fieldset>
+        {% endfor %}
+        <button class="btn primary" type="submit">Показать товары</button>
+        <a class="btn secondary" href="/category/{{ category.slug }}">Сбросить</a>
+        <noscript><p>Для выбора нескольких фильтров требуется JavaScript. Каталог доступен и без фильтров.</p></noscript>
+      </form>
+    </aside>
+    <div class="facet-results">
+      {% if applied %}<div class="facet-applied">Выбрано фильтров: {{ applied|length }}. <a href="/category/{{ category.slug }}">Очистить</a></div>{% endif %}
+      <div class="products">{% for product in products %}<a class="product" href="/product/{{ product.slug }}"><div class="product-icon"><span class="product-gear">⚙</span><small>AP</small></div><div class="product-info"><span class="product-type">АРТИКУЛ {{ product.article }}</span><h3>{{ product.name }}</h3><p>Открыть товар и предложения</p></div><span class="product-link" aria-hidden="true">↗</span></a>{% else %}<div class="empty"><strong>Товары не найдены</strong><p>Попробуйте другой диапазон или очистите фильтры.</p></div>{% endfor %}</div>
+      {% if page > 1 or page * 20 < count %}<nav class="catalog-pagination" aria-label="Страницы каталога">{% if page > 1 %}<a href="{{ previous_page }}" class="btn secondary">← Назад</a>{% endif %}<span>Страница {{ page }}</span>{% if page * 20 < count %}<a href="{{ next_page }}" class="btn secondary">Далее →</a>{% endif %}</nav>{% endif %}
+    </div>
+  </div>
+  <script type="application/json" id="applied-category-facets">{{ applied|tojson }}</script>
+  <script src="/static/category_facets.js?v=0233" defer></script>
+</section>
+{% endblock %}

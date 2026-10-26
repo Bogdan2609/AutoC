@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block body %}
+<div class="breadcrumbs"><a href="/orders">Мои заказы</a><span>/</span>{{ (order.id|string)[:8] }}</div><div class="order-head"><div><span class="eyebrow">ДЕТАЛИ ПОКУПКИ</span><h1>Заказ № {{ (order.id|string)[:8] }}</h1><p>Создан {{ order.created_at.strftime('%d.%m.%Y %H:%M') }} UTC</p></div><span class="status-tag enlarged">{{ order.status }}</span></div>
+<div class="commerce-layout"><div><div class="content-card"><h2>Состав заказа</h2>{% for line in lines %}<div class="order-line"><div><strong>{{ line.title }}</strong><small>{{ line.supplier_code|upper }} · {{ line.quantity }} шт. · {{ line.status }}</small></div><strong>{{ '%.2f'|format(line.unit_retail * line.quantity) }} ₽</strong></div>{% endfor %}<div class="summary-line prominent"><span>{{ "Предварительная сумма (не для оплаты)" if not order.total_is_final else "Сумма заказа" }}</span><strong>{{ '%.2f'|format(order.total) }} ₽</strong></div></div>
+{% if operator_quote %}
+<div class="content-card separate">
+  <h2>Предложение оператора · версия {{ operator_quote.revision }}</h2>
+  <p>Расчёт действителен до {{ operator_quote.expires_at }}. Покупка и оплата не инициированы.</p>
+  {% for entry in operator_quote.lines %}
+  <div class="order-line"><div><strong>{{ entry.title }}</strong><small>{{ entry.quantity }} шт. · товар: {{ entry.unit_price }} ₽ · доставка: {{ entry.delivery_fee }} ₽</small></div></div>
+  {% endfor %}
+  <div class="summary-line"><span>Товары</span><strong>{{ operator_quote.goods_total }} ₽</strong></div>
+  <div class="summary-line"><span>Доставка</span><strong>{{ operator_quote.delivery_total }} ₽</strong></div>
+  <div class="summary-line prominent"><span>Предложено оператором</span><strong>{{ operator_quote.total }} ₽</strong></div>
+  {% if order.status == 'request_quote_offered' %}
+  <div class="inline-buttons">
+    <form action="/orders/{{ order.id }}/quote/accept" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="revision" value="{{ operator_quote.revision }}"><input type="hidden" name="quote_digest" value="{{ operator_quote.digest }}"><button class="btn primary" type="submit">Согласиться с предложением</button></form>
+    <form action="/orders/{{ order.id }}/quote/decline" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="revision" value="{{ operator_quote.revision }}"><input type="hidden" name="quote_digest" value="{{ operator_quote.digest }}"><button class="btn secondary" type="submit">Отклонить</button></form>
+  </div>
+  {% elif order.status == 'request_quote_accepted' %}<p>Предложение принято. Оплата пока недоступна до финальной проверки поставки.</p>
+  {% elif order.status == 'request_quote_declined' %}<p>Предложение отклонено. Ожидается новое предложение оператора.</p>{% endif %}
+</div>
+{% endif %}
+{% if replacements %}<div class="content-card separate"><h2>Предложения замены</h2>{% for r in replacements %}<div class="replacement-row"><strong>Замена позиции · {{ r.status }}</strong><p>{{ r.reason }}</p>{% if r.status=='awaiting_customer' %}<div class="inline-buttons"><form action="/orders/{{ order.id }}/replacements/{{ r.id }}/accept" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary" type="submit">Принять замену</button></form><form action="/orders/{{ order.id }}/replacements/{{ r.id }}/decline" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn secondary" type="submit">Отказаться и оформить возврат</button></form></div>{% endif %}</div>{% endfor %}</div>{% endif %}</div>
+<aside class="summary-card"><span class="eyebrow muted-kicker">ОПЛАТА И ДОСТАВКА</span><h2>Состояние</h2><div class="summary-line"><span>Заказ</span><strong>{{ order.status }}</strong></div><div class="summary-line"><span>СБП</span><strong>{{ payment.status if payment else 'Не создан' }}</strong></div><div class="summary-total">{{ '%.2f'|format(order.total) }} ₽</div>{% if not order.total_is_final %}<p>Это только предварительная сумма. СБП не доступна для этой заявки.</p>{% endif %}{% if payment_link and payment and payment.status not in ('succeeded','canceled') %}<a class="btn primary btn-wide" href="{{ payment_link }}" rel="noopener noreferrer">Перейти к оплате СБП ↗</a>{% endif %}{% if payment and payment.provider_id %}<form action="/orders/{{ order.id }}/refresh" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn secondary btn-wide" type="submit">Проверить оплату</button></form>{% endif %}<div class="summary-line"><span>Получатель</span><strong>{{ order.contact }}</strong></div><div class="summary-line"><span>Телефон</span><strong>{{ order.phone }}</strong></div><p>{{ order.shipping_address }}</p><a class="continue-shopping" href="/catalog">← Вернуться в каталог</a></aside></div>
+{% endblock %}

@@ -1,0 +1,78 @@
+{
+  "release": "autocodex-admin-v0.9",
+  "base": "v0.8 + ThemeButton fix",
+  "files": [
+    {
+      "path": "README_ADMIN_V09_RU.md",
+      "sha256": "8b4c017bc1005927322d32c038afd38403b5e24f26e950fa683662910532a1ea"
+    },
+    {
+      "path": "app/core/security.py",
+      "sha256": "a470ae81581e0a6ed8247b89e0c6ce3597f2e35c4b45b3cbf1b316779338d89c"
+    },
+    {
+      "path": "app/modules/admin_staff/api.py",
+      "sha256": "35ed02c11df83ab6c6b8b1fe04e66b043a71ac88435830ed003a0b7d12dd53a9"
+    },
+    {
+      "path": "app/modules/admin_staff/models.py",
+      "sha256": "7f5caaafb624ff3eaac56dcc45a9374d6aa7770ecacf4697f3ac46893787842d"
+    },
+    {
+      "path": "app/modules/admin_staff/policy.py",
+      "sha256": "04097f35433135b861706b53e7218eb7c7b4a5083acd3cf71c9be1caf109fef4"
+    },
+    {
+      "path": "migrations/versions/20261023_0035_admin_login_sessions.py",
+      "sha256": "2ee6922b9a664143ee49f274678252a3ffd77ec6f388e012ef4db7955aa53e3e"
+    },
+    {
+      "path": "admin-ui/package.json",
+      "sha256": "7dbdf4dfb1872c1d9822083e2ad56c9c95f3d321f7eaac6b049ab4f85382e9a2"
+    },
+    {
+      "path": "admin-ui/playwright.config.ts",
+      "sha256": "e8119012d3e39ad1aadc4dac7cb2035c8c0ccf7542af4f8b4f13e387c7fe672c"
+    },
+    {
+      "path": "admin-ui/e2e/admin.spec.ts",
+      "sha256": "cd47aa6d422b0cf201cc936513c4559ade7c1e77152297e6577f0ddf16896f99"
+    },
+    {
+      "path": "admin-ui/src/App.tsx",
+      "sha256": "57398ea17f7ed20ed13c0db259bd6eb99ad4f30b5424f53b2fb396a5522ebdb0"
+    },
+    {
+      "path": "admin-ui/src/lib/api.ts",
+      "sha256": "6904cdc09817a2e232daecff1a91b1a2241da4562b38cfcaf0a0ed0691be3921"
+    },
+    {
+      "path": "admin-ui/src/pages/Staff.tsx",
+      "sha256": "4836dff0ee9c6f536a244ce8ae726f160be38de6d2523fab32dbca24b1325e24"
+    },
+    {
+      "path": "admin-ui/src/pages/Section.tsx",
+      "sha256": "d8b4fed9e7683309606630a7ba2c2eb1142ce71a752377be25be71d303a5124f"
+    },
+    {
+      "path": "admin-ui/src/pages/MigrationAudit.tsx",
+      "sha256": "8c786c7b9547a917fbd5b15f1907b403cd551c37cc5419e176a1256b26dcccb6"
+    },
+    {
+      "path": "admin-ui/src/features/AdminAction.tsx",
+      "sha256": "aa23e7acd746f48fb2114833ac455d6ddba1fcc90a53e57d319d7e81f7399456"
+    },
+    {
+      "path": "tests/test_admin_staff_v08.py",
+      "sha256": "e68f06807318e3ecb1f429eb70e4b281487d37cb4230ed83105f76597b3544db"
+    },
+    {
+      "path": "tests/test_admin_staff_v09.py",
+      "sha256": "3eb2d002ba5f55d5e37d7fb2cee7a0bde46becea720bb31fb3f80a9332d08740"
+    },
+    {
+      "path": "tests/test_admin_v09_contract.py",
+      "sha256": "38125d43a09b3f67452a97101815607eec2a351d2932d1367753bb638a53725a"
+    }
+  ]
+}

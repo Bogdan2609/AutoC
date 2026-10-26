@@ -1,0 +1,658 @@
+[
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага | перед прав/лев |"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ левый"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага передний"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага AUDI Q7 06-/VW TOUAREG 03-10 зад.подв."
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага подвески | перед прав/лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага передний VW TIGUAN II"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага | перед прав/лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага | зад прав/лев |"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок заднего рычага подвески | зад прав/лев |"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ | прав |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага MB ML(W166) перед.наруж. | лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок передний рычага переднего KIA CERATO I седан (LD) | SPECTRA"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага без кронштейна (гидравлический) | перед прав/лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага зад.поперечн.Nissan Qashqai 06>/X-TRAIL T31 07>"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага AUDI/VW A6/PASSAT 97-05 задн.подв."
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ ВЕРХН ЛЕВ/ПРАВ"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага задний (гидравлический)"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага (гидравлический) | перед прав/лев |"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "РОЛИК НАТЯЖИТЕЛЯ РЕМНЯ ПРИВОДНОГО PT-P 2017"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя приводного ремня"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага | зад |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага передней подвески задний Astra, Corsa, Meriva, Zafira"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага | зад прав/лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок заднего рычага | зад прав/лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага | перед |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага пер. подвески OPEL ASTRA G, H, VECTRA B, C передний"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок передний рычага FIAT GRANDE PUNTO 10/05-, FIORINO 08-, LINEA 07-, QUBO 08-, PEUGEOT: BIP"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага подвески | перед прав |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага | зад |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага передний Mazda Axela BK 03-09"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "САЙЛЕНТБЛОК ПЕРЕДНЕГО РЫЧАГА ЗАДНИЙ БЕЗ КОРПУСА"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага задний"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага передней подвески, задний"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок заднего рычага наружный | зад |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага NISSAN ARMADA TA60/INFINITI QX56 03-15 задн.подв."
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок передний рычага переднего TOYOTA COROLLA (_E12_), AVENSIS седан (_T25_), AVENSIS универс"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага без кронштейна | зад прав/лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок заднего рычага"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага NISSAN QASHQAI 13- пер.подв.лев/прав."
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага задний | лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага наружный"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага переднего задний Hyundai H-1 TQ 07>"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага пер.зад. Hyundai H-1 | перед прав |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок заднего рычага | зад |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага FORD MONDEO IV -15 задн. | лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага HYUNDAI SONATA EF 04- (ТАГАЗ) задн.подв."
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага пер. подвески VAG OCTAVIA/SUPERB/JETTA IVзадний"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок переднего рычага внутренний"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ TOYOTA Corolla"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "САЙЛЕНТБЛОК РЫЧАГА ЗАДНЕГО ПРОДОЛЬНОГО"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага пер. подвески CITROEN C4 I-II, PEUGEOT 307, 308, PARTNER II передний"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага зад. подв. верхн. Ford Focus 98>, Mazda 3 03>"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага CHEVROLET LACETTI 03- пер.подв."
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага | лев |"
+  },
+  {
+    "expected_head": "arm_bushing",
+    "description": "Сайлентблок рычага передний Ford Fiesta/Fusion 01>"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжитель ремня без эксцентрика (опорный)"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ нижний левый"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Направляющая цепи ГРМ"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ BMW E36/E34/E38/E60/E65/X5 2.0-3.0 M50/52/54"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ BMW E36/E34/E38/E60"
+  },
+  {
+    "expected_head": "wheel_bearing",
+    "description": "Подшипник ступицы колеса | зад лев |"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи грм"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 244202E000 KIA Spo"
+  },
+  {
+    "expected_head": "strut_mount",
+    "description": "Опора задней стойки амортизатора | зад |"
+  },
+  {
+    "expected_head": "brake_caliper_piston",
+    "description": "Поршень суппорта VW Transporter T5 (03-) перед. d=60мм (RCF 185102)"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ BMW E36/E34 2.0i-2."
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ MR984189"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ правый"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня RENAULT о.н. 7408086970 HCV"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ ЛЕВ"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи (06H109467AR) ( 06H109467AR )"
+  },
+  {
+    "expected_head": "brake_caliper_piston",
+    "description": "Поршень суппорта Ford Focus I (98-) зад. d=34мм (RCF 102062)"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня 74х38.5 Scania HCV"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ ПРАВ"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ Hyundai Coupe"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжитель ремня с эксцентриком (натяжной)"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ нижний"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня MAN о.н. 51958007431 HCV"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня вспомогательных агрегатов в"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня вспомогательных агрегатов в сборе"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Направляющая цепи ГРМ ( 1355921030 )"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 11317565242 BMW F01/F02/F03/F04/F10 08>"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 11317565242 BMW F01"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня 8200933753 GL.TN.1.3 Logan,"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня вспомогательных агрегатов"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня SCANIA о.н. 11795774 HCV"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ Нижн/МАСЛЯННОГО НАСОСА"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ Hyundai Solaris 1.4/1.6 GAMMA"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ Hyundai Solaris 1.4"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжитель ремня без эксцентрика"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ ( 081835 )"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня, с кронштейном"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня Hyundai iX35 10>"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи масляного насоса"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ (№2) 1-2GD HILUX/LC Prado ##J15# 15-"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня Skoda Octavia 04>"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ ВЕРХНЕЙ"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 55353997 Opel Astra H/Corsa D 1.2/1.4 04>"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня с эксцентриком"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня !hyundai hd 65/78"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Направляющая цепи"
+  },
+  {
+    "expected_head": "drive_belt_tensioner",
+    "description": "Натяжитель ремня приводного"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжитель ремня навесного оборудования"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ Nissan QR25DE T31 07/03-, верхний"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ верхний левый"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ TOYOTA Camry"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ ( 243864A100 )"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 130854M500Nissan Almera/Primera QG15DE 06>"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня обводной 1J0145276B BR.TN.1.25 VW Polo, Golf, Tiguan 06-, Skoda Rapid"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ HYUNDAI Solaris (10-17)"
+  },
+  {
+    "expected_head": "suspension_frame_bushing",
+    "description": "Сайлентблок рамы/подрамника"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня навесного оборудования"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ ( 130911LA3A )"
+  },
+  {
+    "expected_head": "brake_caliper_piston",
+    "description": "Поршень суппорта Ford Transit (06-) перед. d=48мм (RCF 105102)"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ Toyota Auris"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня в сборе"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 2"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ Audi A1 10>, VW Golf 5/6 03>/Passat 05>/Polo 0"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "натяжитель цепи ГРМ Toyota Corolla/Rav4 1.4-1.8 00>"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ Mitsubishi Outland"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 11317523884 BMW E87"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи грм"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи грм ( 2443125001 )"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ для гидронат."
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Направляющая цепи ГРМ ( 243874A030 )"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ HYUNDAI Santa Fe II"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ НИЖНЕЙ 2"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 06K109469N VW Passat B8 1.8/2.0TSi 15>"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 1356237020 Toyota Corolla 1.6 1ZR-FE 06>"
+  },
+  {
+    "expected_head": "suspension_frame_bushing",
+    "description": "САЙЛЕНТБЛОК РАМЫПОДРАМНИКА"
+  },
+  {
+    "expected_head": "strut_mount",
+    "description": "Опора задней стойки амортизатора-комплект BMW 1 07-13/3 04-11/X1 09-15"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ Toyota Aurion/ Auris/Celica/Corolla/RAV4 1.4-"
+  },
+  {
+    "expected_head": "cv_boot",
+    "description": "пыльник наружнего ШРУСа"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ | зад |"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ боковой"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "НАТЯЖИТЕЛЬ ЦЕПИ ГРМ"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня вспомогательных агрегатов ("
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня вспомогательных агрегатов (8 кл.)"
+  },
+  {
+    "expected_head": "timing_chain_guide",
+    "description": "Успокоитель цепи ГРМ 2443126000 Hyundai Accent 1.5"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня обводной BR.TN.1.14 HYUNDAI Solaris, i30,i40, KIA Rio, Cerato, Sportage"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня обводной"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ HYUNDAI PALISADE (2019-)"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ 1283277E00 Suzuki Grand Vitara 2.0 J20A 98>"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжитель ремня"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ 13070-1HC0A/AMD.CS267 AMD"
+  },
+  {
+    "expected_head": "brake_caliper_piston",
+    "description": "Поршень суппорта VW Polo Sedan (RUS) (10-) 1ZC перед. d=54мм (RCF 182004)"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "РОЛИК НАТЯЖИТЕЛЯ РЕМНЯ ПРИВОДНОГО 1,6 / 1,4 Solari"
+  },
+  {
+    "expected_head": "wheel_bearing",
+    "description": "Подшипник ступицы колеса | перед лев |"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя приводного ремня 8450006996 GL.TN.1.19 Lada Vesta, X-Ray"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи грм e4g16-1007060ba (цс)"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня IVECO о.н. 500318393 HCV"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ Opel Astra/Corsa/Agila 1.0-1.4 96>"
+  },
+  {
+    "expected_head": "timing_chain_tensioner",
+    "description": "Натяжитель цепи ГРМ Opel Astra/Corsa"
+  },
+  {
+    "expected_head": "suspension_frame_bushing",
+    "description": "САЙЛЕНТБЛОК РАМЫ/ПОДРАМНИКА ПЕРЕДНИЙ НИЖНИЙ NISSAN JUKE F15 (2010-2020) NISSAN LEAF ZE0 (2010-2017)"
+  },
+  {
+    "expected_head": "wheel_bearing",
+    "description": "Подшипник ступицы колеса | зад |"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя приводного ремня Hyundai/Kia 65х31 (25282-2G000, 534 0430 10, VKM 65039)"
+  },
+  {
+    "expected_head": "belt_tensioner",
+    "description": "Ролик натяжителя ремня с кронштейном RENAULT о.н. 7420521447 HCV"
+  }
+]

@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "./global.css";
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 7px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+}
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin:0; background:var(--background); color:var(--foreground); font-family: Inter, 'Segoe UI', ui-sans-serif, system-ui, -apple-system, sans-serif; font-feature-settings: "cv02", "cv03", "cv04", "cv11"; -webkit-font-smoothing: antialiased; }
+button, input, textarea { font: inherit; }
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+:where(button,a,input,textarea,select,[tabindex]):focus-visible { outline:2px solid var(--ring); outline-offset:3px; }
+::selection { background:var(--accent); color:var(--accent-foreground); }
+::-webkit-scrollbar { width:9px; height:9px; }
+::-webkit-scrollbar-thumb { background:var(--border); border:2px solid transparent; background-clip:padding-box; border-radius:9999px; }
+.table-scroller { overflow-x:auto; width:100%; }
+.surface-shadow { box-shadow: 0 1px 2px oklch(0 0 0 / .025); }
+.fade-in { animation: rise .2s ease-out; }
+@keyframes rise { from { opacity:.65; transform:translateY(5px) } to {opacity:1;transform:translateY(0)} }
+/* A signature dotted coordinate field, deliberately subtle and fully theme-aware. */
+.adm-dotfield { background-image:radial-gradient(var(--border) .65px, transparent .65px); background-size:15px 15px; }
+.adm-rail { border-right:1px solid var(--sidebar-border); background:var(--sidebar); color:var(--sidebar-foreground); }
+.adm-nav-item { color:var(--muted-foreground); }
+.adm-nav-item:hover { color:var(--sidebar-foreground); background:var(--sidebar-accent); }
+.adm-nav-item.is-active { background:var(--sidebar-accent); color:var(--sidebar-accent-foreground); font-weight:650; }
+.adm-nav-item.is-active::before { content:""; position:absolute;top:25%;bottom:25%;left:-12px;width:3px;border-radius:4px;background:var(--sidebar-foreground); }
+.adm-soft-panel { background:color-mix(in oklch,var(--muted) 45%,var(--background)); }
+@media (prefers-reduced-motion:reduce) { html{scroll-behavior:auto} *,*::before,*::after {animation-duration:.01ms!important;transition-duration:.01ms!important} }
