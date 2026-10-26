@@ -1,0 +1,35 @@
+{
+  "release": "0.39.0",
+  "base_release": "0.38.0",
+  "type": "incremental",
+  "changed_files": [
+    "pyproject.toml"
+  ],
+  "new_files": [
+    "scripts/release_gate_v039.py",
+    "tests/test_release_gate_v039.py",
+    "docs/AUTOCODEX_V039_RELEASE_ACCEPTANCE_RU.md"
+  ],
+  "expected_before_sha256": {
+    "pyproject.toml": "40d29f3d34a96b591416452bb02b4a2bdca6b47cb2294baaff2e0fccb5ec1019"
+  },
+  "expected_after_sha256": {
+    "pyproject.toml": "461f0872489981c23af7941d3de6004a5ae94a1ca22426a91860ab854c7718bd",
+    "scripts/release_gate_v039.py": "b1e1c2f31d011419b30aeefc1452505e4ac5d4df2a445c19b574cd4965ca2d91",
+    "tests/test_release_gate_v039.py": "45a7c1f0c604cd1be55911bbb71d7845a883c6b537963c11a82be0d70c5a6a00",
+    "docs/AUTOCODEX_V039_RELEASE_ACCEPTANCE_RU.md": "8a4bf4a2f7024bb9202e16692e8ad2c743c4eb0bda327c59debf7ee3135b4660"
+  },
+  "alembic_migrations": [],
+  "real_supplier_writes_newly_enabled": false,
+  "live_payment_checkout_newly_enabled": false,
+  "read_only_release_gate": true,
+  "live_money_decision": "NO_GO",
+  "tested": {
+    "pytest_selected_previous_run": "721 passed, 1 skipped, 1 deselected",
+    "gate_tests": "11 passed",
+    "docker_build": "not_run",
+    "postgresql_races": "not_run",
+    "frontend_build": "not_run"
+  },
+  "install": "Copy new/changed paths from ZIP onto exactly v0.38.0; verify SHA-256 before overwrite. Do not overwrite .env."
+}
