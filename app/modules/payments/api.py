@@ -30,7 +30,8 @@ async def verify_remote(db,payment):
  amount=remote.get('amount',{})
  if amount.get('currency')!='RUB' or not _matches_money(amount.get('value'),payment.amount):raise HTTPException(409,'Payment amount mismatch')
  # Serialize concurrent webhook processing; repeated notifications must not duplicate procurement.
- payment=await db.scalar(select(Payment).where(Payment.id==payment.id).with_for_update())
+ payment=await db.scalar(select(Payment).where(Payment.id==payment.id).with_for_update().execution_options(populate_existing=True))
+ if not payment:raise HTTPException(409,'Payment record missing')
  order=await db.get(Order,payment.order_id)
  if not order or order.total!=payment.amount:raise HTTPException(409,'Order/payment mismatch')
  # Operator requests contain non-final indicative totals. Never turn them into
@@ -141,3 +142,27 @@ async def reconcile_refund(refund_id:UUID,db:AsyncSession=Depends(get_session)):
     ref.status='provider_pending' if state=='pending' else state
     await db.commit()
     return {'refund_id':str(ref.id),'status':ref.status}
+
+
+@router.get('/admin/payments/needs-reconciliation', dependencies=[Depends(require_admin)])
+async def unsettled_payments(db: AsyncSession = Depends(get_session)):
+    """Owner-only, redacted operational view, including missing provider IDs.
+
+    A payment whose provider ID was lost during an uncertain create cannot be
+    looked up safely through GET and MUST NOT be recreated with a new key.
+    """
+    from app.modules.commerce.models import Job
+    rows = (await db.scalars(select(Payment).where(
+        Payment.status.in_(('creating', 'pending', 'waiting_for_capture',
+                            'reconciliation_required')))
+        .order_by(Payment.created_at, Payment.id).limit(100))).all()
+    keys = [f'payment_reconcile:{r.id}' for r in rows]
+    jobs = (await db.scalars(select(Job).where(Job.dedup_key.in_(keys)))).all() if keys else []
+    state = {j.dedup_key: j.status for j in jobs}
+    return [{
+        'payment_id': str(p.id), 'order_id': str(p.order_id), 'status': p.status,
+        'provider_reference_present': bool(p.provider_id),
+        'reconciliation_job_status': state.get(f'payment_reconcile:{p.id}'),
+        'manual_reconciliation_required': (
+            not p.provider_id or state.get(f'payment_reconcile:{p.id}') == 'manual_review'),
+    } for p in rows]

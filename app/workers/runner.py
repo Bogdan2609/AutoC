@@ -325,6 +325,9 @@ async def one(factory=None):
    elif kind=='procurement':await procurement(db,job)
    elif kind=='refund':await refund(db,job)
    elif kind=='replacement':await replacement(db,job)
+   elif kind=='payment_reconcile':
+    from app.modules.payments.reconciliation import reconcile_payment_job
+    await reconcile_payment_job(db,job)
    elif kind=='marketplace_reservation_expire':
     from app.modules.marketplace.checkout_v017 import expire_reservation
     await expire_reservation(db,UUID(job.payload['order_id']))
@@ -334,7 +337,7 @@ async def one(factory=None):
     # must stay visible to operators, never disappear as a successful job.
     after = await db.get(Procurement, UUID(job.payload['id']))
     job.status = 'manual_review' if after and after.status == 'manual_review' else 'done'
-   else:
+   elif kind!='payment_reconcile' or job.status=='running':
     job.status='done'
    await db.commit()
    if kind=='search':
@@ -345,7 +348,7 @@ async def one(factory=None):
      await invalidate(state.product_id)
   except Exception as e:
    await db.rollback();job=await db.get(Job,job_id)
-   job.status='manual_review' if kind in ('procurement','refund','replacement','marketplace_reservation_expire') else 'failed'
+   job.status='manual_review' if kind in ('procurement','refund','replacement','marketplace_reservation_expire','payment_reconcile') else 'failed'
    job.last_error=type(e).__name__;await db.commit()
    logging.getLogger(__name__).warning('worker_job_failed job_id=%s kind=%s error_type=%s',
                                        job_id,kind,type(e).__name__)
@@ -356,6 +359,8 @@ async def _refresh_loop():
   try:
    async with get_session_factory()() as session:
     await hot_refresh(session)
+    from app.modules.payments.reconciliation import schedule_payment_reconciliation
+    await schedule_payment_reconciliation(session)
     # Coarse health counters; log only operational aggregates, never job payloads.
     pending=await session.scalar(select(func.count()).select_from(Job).where(Job.status=='pending'))
     overdue=await session.scalar(select(func.count()).select_from(Job).where(

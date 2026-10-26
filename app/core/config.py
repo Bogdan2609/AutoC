@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_fake_enabled: bool = False  # test-only opt-in, never production
+    payments_reconciliation_enabled: bool = False  # explicit opt-in after sandbox checks
     yookassa_vat_code: int = Field(default=0, ge=0, le=6)
     supplier_api_enabled: bool = False
     supplier_procurement_enabled: bool = False
