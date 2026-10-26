@@ -69,12 +69,15 @@ async def require_admin(request: Request, x_admin_token: str | None = Header(def
 
     request.state.admin_actor_id = actor
     request.state.admin_actor_kind = actor_kind
-    # Fail closed: if an audit insert fails, do NOT execute the mutation.
+    # Audit and business writes belong to the SAME unit of work.  flush()
+    # checks that the audit row can be inserted without prematurely committing
+    # it.  If the handler fails, the session closes and rolls the row back.
     if request.method in _MUTATIONS:
         try:
             db.add(AdminAuditLog(actor_user_id=actor, actor_kind=actor_kind,
                                  action=request.method, path=request.url.path[:400],
                                  scope=(scope or 'unclassified')))
-            await db.commit()
+            await db.flush()
         except SQLAlchemyError as exc:
+            await db.rollback()
             raise HTTPException(503, 'Журнал административных операций недоступен') from exc

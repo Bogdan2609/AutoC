@@ -41,14 +41,14 @@ async def current_user(authorization:str|None=Header(default=None),db:AsyncSessi
 async def register(body:Register,request:Request,db:AsyncSession=Depends(get_session)):
  await enforce_budget('register_ip',peer_ip(request),limit=5,period=3600)
  encoded=await anyio.to_thread.run_sync(hasher.hash,body.password,limiter=_ARGON_LIMITER)
- user=User(email=str(body.email).casefold(),password_hash=encoded,display_name=body.display_name.strip());db.add(user)
+ user=User(email=str(body.email).strip().casefold(),password_hash=encoded,display_name=body.display_name.strip());db.add(user)
  try:await db.commit()
  except IntegrityError as exc:
   await db.rollback();raise HTTPException(409,'Email already registered') from exc
  return {'id':str(user.id),'email':user.email}
 @router.post('/login')
 async def login(body:Login,request:Request,db:AsyncSession=Depends(get_session)):
- email=str(body.email).casefold()
+ email=str(body.email).strip().casefold()
  await enforce_budget('login_ip',peer_ip(request),limit=20,period=300)
  await enforce_budget('login_account',email,limit=8,period=300)
  user=await db.scalar(select(User).where(User.email==email))

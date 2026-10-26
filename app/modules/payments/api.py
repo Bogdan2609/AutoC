@@ -27,12 +27,20 @@ async def verify_remote(db,payment):
      not isinstance(remote.get('metadata'),dict) or
      remote['metadata'].get('order_id')!=str(payment.order_id)):
   raise HTTPException(409,'Payment identity mismatch')
- amount=remote.get('amount',{})
+ amount=remote.get('amount')
+ if not isinstance(amount,dict):raise HTTPException(409,'Malformed provider payment amount')
  if amount.get('currency')!='RUB' or not _matches_money(amount.get('value'),payment.amount):raise HTTPException(409,'Payment amount mismatch')
- # Serialize concurrent webhook processing; repeated notifications must not duplicate procurement.
- payment=await db.scalar(select(Payment).where(Payment.id==payment.id).with_for_update().execution_options(populate_existing=True))
+ # Lock the common order BEFORE the individual payment. Concurrent webhooks
+ # for different provider payments of the same order must serialize too.
+ # Otherwise both transactions can observe 'no other succeeded payment'.
+ order=await db.scalar(select(Order).where(Order.id==payment.order_id)
+                       .with_for_update().execution_options(populate_existing=True))
+ payment=await db.scalar(select(Payment).where(Payment.id==payment.id)
+                         .with_for_update().execution_options(populate_existing=True))
  if not payment:raise HTTPException(409,'Payment record missing')
- order=await db.get(Order,payment.order_id)
+ if (payment.provider_id != remote.get('id') or payment.order_id != (order.id if order else None) or
+     payment.amount != Decimal(rub_money(amount.get('value')))):
+  raise HTTPException(409,'Payment record changed during verification')
  if not order or order.total!=payment.amount:raise HTTPException(409,'Order/payment mismatch')
  # Operator requests contain non-final indicative totals. Never turn them into
  # payable orders, even if a legacy or manually inserted payment exists.
@@ -46,7 +54,9 @@ async def verify_remote(db,payment):
                          'fulfillment_exception','fulfilled'):
   raise HTTPException(409,'Order status is not eligible for payment reconciliation')
  if remote.get('status')=='succeeded' and remote.get('paid') is True:
-  if remote.get('payment_method',{}).get('type')!='sbp':raise HTTPException(409,'Payment is not SBP')
+  method=remote.get('payment_method')
+  if not isinstance(method,dict) or method.get('type')!='sbp':
+   raise HTTPException(409,'Payment is not SBP')
   lines=(await db.scalars(select(OrderLine).where(OrderLine.order_id==order.id))).all()
   if not lines or order.total<=0 or any(x.quantity<=0 for x in lines):
    raise HTTPException(409,'No payable order lines')
@@ -63,7 +73,13 @@ async def verify_remote(db,payment):
    await record_paid_fulfillment(db,order,lines)
    await db.commit()
  elif remote.get('status')=='canceled' and payment.status not in ('succeeded','canceled'):
-  payment.status='canceled';order.status='payment_canceled';await db.commit()
+  payment.status='canceled'
+  # Canceling an alternative payment must not erase a valid paid order.
+  existing_paid=await db.scalar(select(Payment.id).where(
+      Payment.order_id==order.id,Payment.id!=payment.id,Payment.status=='succeeded'))
+  if not existing_paid:
+   order.status='payment_canceled'
+  await db.commit()
  return {'order_id':str(order.id),'payment_status':payment.status,'order_status':order.status}
 @router.post('/yookassa/webhook')
 async def webhook(body:dict,db:AsyncSession=Depends(get_session)):

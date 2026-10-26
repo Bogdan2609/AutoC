@@ -268,7 +268,10 @@ async def procurement(db,job):
  await reconcile_order(db,order)
 
 async def refund(db,job):
- ref=await db.get(Refund,UUID(job.payload['id']))
+ # Serialize every refund attempt on the refund row; an uncertain POST
+ # must never be replayed by another worker or a duplicate legacy job.
+ ref=await db.scalar(select(Refund).where(Refund.id==UUID(job.payload['id']))
+                     .with_for_update().execution_options(populate_existing=True))
  if not ref:return
  # There is no safe blind retry of an ambiguous external refund.
  if ref.status=='uncertain':
@@ -301,9 +304,24 @@ async def one(factory=None):
    # Crash recovery: do not automatically retry purchase/refund calls with uncertain result.
    stalled=await db.scalar(select(Job).where(Job.status=='running',Job.due_at<utc()).order_by(Job.due_at).with_for_update(skip_locked=True))
    if stalled:
-    safe_retry = stalled.kind in ('search','feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization','payment_reconcile','refund_reconcile')
+    safe_retry = stalled.kind in ('search','feed_import','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization','payment_reconcile','refund_reconcile')
+    if stalled.kind == 'feed_catalog_sync':
+     # The pipeline commits its cursor while processing. Blindly replaying a
+     # timed-out job can race the original worker and duplicate catalog work.
+     from app.modules.supplier_feeds.models import FeedCatalogSync
+     try:
+      stalled_sync_id = UUID(stalled.payload['sync_id'])
+     except (KeyError, ValueError, TypeError):
+      stalled_sync_id = None
+     if stalled_sync_id is not None:
+      feed_sync = await db.scalar(select(FeedCatalogSync).where(
+          FeedCatalogSync.id == stalled_sync_id).with_for_update())
+      if feed_sync and feed_sync.status in ('queued','processing'):
+       feed_sync.status = 'paused'
+       feed_sync.message = 'worker_timeout_requires_manual_review'
     stalled.status='pending' if safe_retry and stalled.attempts < (12 if stalled.kind in ('payment_reconcile','refund_reconcile') else 5) else 'manual_review'
-    stalled.last_error='worker_timeout_requires_reconciliation' if not safe_retry else (
+    stalled.last_error=('feed_catalog_worker_timeout_manual_review' if stalled.kind == 'feed_catalog_sync'
+        else 'worker_timeout_requires_reconciliation') if not safe_retry else (
         'retry_budget_exhausted_manual_review' if stalled.attempts >= (12 if stalled.kind in ('payment_reconcile','refund_reconcile') else 5) else 'retry_backoff_after_timeout')
     if stalled.status == 'pending':
      stalled.due_at=utc()+timedelta(minutes=min(2**max(1,stalled.attempts),60))

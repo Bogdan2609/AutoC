@@ -78,7 +78,7 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 try:
     api_version = package_version('autoparts-platform-v2')
 except PackageNotFoundError:
-    api_version = '0.37.0'  # local source checkout without installed wheel
+    api_version = '0.38.0'  # local source checkout without installed wheel
 
 app = FastAPI(title="Autoparts Platform v2", version=api_version, lifespan=lifespan)
 @app.middleware('http')
@@ -88,10 +88,16 @@ async def bound_public_requests(request:Request,call_next):
         ('/offers' in path)) or (path.startswith('/api/v1/catalog-v021/categories/') and
         path.endswith('/facets'))
     is_webhook=(path=='/api/v1/payments/yookassa/webhook' and request.method=='POST')
-    if is_expensive or is_webhook:
-        # Ingress must also reject chunked/oversized bodies; this is a local guard.
+    media_type=request.headers.get('content-type','').split(';',1)[0].strip().lower()
+    is_json_write=(path.startswith('/api/') and request.method in ('POST','PUT','PATCH')
+                   and (not media_type or media_type=='application/json' or
+                        media_type.endswith('+json')))
+    if is_expensive or is_webhook or is_json_write:
+        # Bound every API JSON mutation before validation, even for streamed
+        # requests without Content-Length. Binary/multipart imports must have
+        # separate upload limits at ingress and their own route validation.
         length=request.headers.get('content-length')
-        limit_bytes = 16384 if is_webhook else 65536
+        limit_bytes = 16384 if is_webhook else (65536 if is_expensive else 1048576)
         if length is not None and (not length.isdecimal() or int(length)>limit_bytes):
             return JSONResponse({'detail':'Request body too large'},status_code=413)
         # Content-Length is not authoritative for chunked/streaming requests.
@@ -104,11 +110,12 @@ async def bound_public_requests(request:Request,call_next):
                 return JSONResponse({'detail':'Request body too large'},status_code=413)
             collected.append(chunk)
         request._body = b''.join(collected)
-        try:
-            await enforce_budget('webhook' if is_webhook else 'public_costly',peer_ip(request),
-                limit=60 if is_webhook else 20,period=60)
-        except HTTPException as exc:
-            return JSONResponse({'detail':exc.detail},status_code=exc.status_code,headers=exc.headers)
+        if is_expensive or is_webhook:
+            try:
+                await enforce_budget('webhook' if is_webhook else 'public_costly',peer_ip(request),
+                    limit=60 if is_webhook else 20,period=60)
+            except HTTPException as exc:
+                return JSONResponse({'detail':exc.detail},status_code=exc.status_code,headers=exc.headers)
     return await call_next(request)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
