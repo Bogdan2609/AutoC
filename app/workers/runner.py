@@ -34,6 +34,25 @@ async def search(db, job):
     account = None
     destination = None
     if p.get('account_id'):
+        # Reject a queued job whose cache key belongs to another account or
+        # destination. The payload is durable, but must not grant authority.
+        from app.modules.marketplace.account_search import account_key
+        if not p.get('destination_id') or p['key'] != account_key(
+                p['brand'], p['article'], UUID(p['account_id']), UUID(p['destination_id'])):
+            return
+    else:
+        # A formerly valid global job can survive the registration of a scoped
+        # account. Never use legacy credentials for a supplier now owned by
+        # independently configured API accounts (even if currently disabled).
+        from app.modules.marketplace.models import SupplierAccount
+        configured = await db.scalar(select(SupplierAccount.id).join(
+            Supplier, SupplierAccount.supplier_id == Supplier.id).where(
+            Supplier.code == code).limit(1))
+        if configured is not None:
+            state.status = 'disabled'
+            state.expires_at = utc() + timedelta(minutes=5)
+            return
+    if p.get('account_id'):
         from app.modules.marketplace.models import SupplierAccount, SupplierDestination, FulfillmentNode
         from app.modules.marketplace.account_credentials import ready, for_account
         account = await db.get(SupplierAccount, UUID(p['account_id']))
@@ -74,6 +93,27 @@ async def search(db, job):
     if not state or state.status!='refreshing' or (state.last_requested_at and aware(state.last_requested_at).isoformat()!=p.get('requested_at')):
         return
     cfg = await runtime(db,code)
+    if account_id is not None:
+        # Read current database values *after* the network request. An account
+        # or destination can be disabled while the supplier is answering; an
+        # in-flight request must not publish fresh saleable snapshots afterward.
+        from app.modules.marketplace.models import SupplierAccount, SupplierDestination, FulfillmentNode
+        live_scope = await db.scalar(select(SupplierAccount.id).join(
+            SupplierDestination, SupplierDestination.account_id == SupplierAccount.id
+        ).join(FulfillmentNode, FulfillmentNode.id == SupplierDestination.node_id).where(
+            SupplierAccount.id == account_id,
+            SupplierDestination.id == destination.id,
+            SupplierAccount.enabled.is_(True),
+            SupplierAccount.read_enabled.is_(True),
+            SupplierDestination.enabled.is_(True),
+            SupplierDestination.verified.is_(True),
+            FulfillmentNode.active.is_(True),
+            FulfillmentNode.merchant_id == SupplierAccount.merchant_id,
+        ))
+        if live_scope is None:
+            state.status = 'disabled'
+            state.expires_at = utc() + timedelta(minutes=5)
+            return
     state.last_finished_at=utc()
     state.last_duration_ms=duration
     if success:

@@ -28,7 +28,8 @@ REVIEW_ORDER_STATUSES = (
     'request_quote_declined', 'fulfillment_review', 'fulfillment_exception',
     'procurement_manual_review', 'supplier_rejected',
 )
-REVIEW_PURCHASE_STATUSES = ('manual_review', 'unknown', 'sent_unverified', 'supplier_rejected')
+REVIEW_PURCHASE_STATUSES = ('manual_review', 'unknown', 'sent_unverified', 'supplier_rejected',
+                            'dispatch_unknown', 'accepted_unverified', 'accepted', 'reconciling', 'rejected')
 REVIEW_REFUND_STATUSES = ('pending', 'unknown', 'manual_review', 'failed')
 
 
@@ -239,8 +240,12 @@ async def monitored_purchase_detail(attempt_id: uuid.UUID, db: AsyncSession = De
         'sent_at': attempt.sent_at.isoformat() if attempt.sent_at else None,
         'completed_at': attempt.completed_at.isoformat() if attempt.completed_at else None,
         'manual_reconciliation_required': attempt.status in (
-            'dispatch_unknown', 'manual_review', 'rejected',
+            'dispatch_unknown', 'manual_review', 'rejected', 'accepted_unverified',
+            'accepted', 'reconciling',
         ),
+        'verified': attempt.verified_at is not None,
+        'last_reconciled_at': attempt.last_reconciled_at.isoformat() if attempt.last_reconciled_at else None,
+        'cancellation_requested': attempt.cancellation_requested_at is not None,
         'advisory': 'Recorded status is not live supplier confirmation. Do not retry unknown outcomes.',
     }
 

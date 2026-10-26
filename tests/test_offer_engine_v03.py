@@ -16,7 +16,10 @@ async def facade():
         yield db
 
 @pytest.mark.asyncio
-async def test_supplier_policy_and_access(client,admin_headers):
+async def test_supplier_policy_and_access(client,admin_headers,monkeypatch):
+    # This access-policy test must not depend on any local .env credentials.
+    # Real credential readiness is exercised by dedicated adapter tests.
+    monkeypatch.setattr('app.modules.offer_engine.operations.credentials_ready', lambda code: False)
     assert (await client.get('/api/v1/backoffice/offer-engine/suppliers')).status_code==403
     r=await client.get('/api/v1/backoffice/offer-engine/suppliers',headers=admin_headers)
     assert r.status_code==200,r.text

@@ -1,0 +1,60 @@
+{
+  "release": "0.35.0",
+  "base_release": "0.34.0",
+  "type": "incremental",
+  "changed_files": [
+    "app/modules/marketplace/procurement.py",
+    "app/main.py",
+    "pyproject.toml",
+    "app/presentation/operator_monitor.py",
+    "admin-ui/src/features/PurchaseAttemptDetail.tsx",
+    "admin-ui/src/pages/OrderPurchases.tsx",
+    "tests/test_v014_integration.py",
+    "tests/test_rossko_auto_requisite_resolution.py"
+  ],
+  "new_files": [
+    "app/modules/marketplace/purchase_lifecycle.py",
+    "app/modules/marketplace/purchase_operations.py",
+    "migrations/versions/20261026_0036_supplier_purchase_reconciliation.py",
+    "tests/test_supplier_purchase_lifecycle_v035.py",
+    "docs/AUTOCODEX_V035_SUPPLIER_LIFECYCLE_RU.md"
+  ],
+  "expected_before_sha256": {
+    "app/modules/marketplace/procurement.py": "13d92b0a6caf6f4b63dd0966fc4506746be593298bec064cda567ba1240881c0",
+    "app/main.py": "89eb96ccb3adfc5b160cfc0b94be42b7c1165b80c8b2a28685904205ac473b5f",
+    "pyproject.toml": "dce2dba60a47a8a9c75091fa62870206b30e32e46b4a7393a4d6012e1085bba6",
+    "app/presentation/operator_monitor.py": "f1fddb53ed1c52215482dbeaedb0089caf9bebb12e04b7d46254577961bff318",
+    "admin-ui/src/features/PurchaseAttemptDetail.tsx": "5a7090abdb568e054c1d35d6f35024f112f73c686ef6f8bf73480e269d65eddc",
+    "admin-ui/src/pages/OrderPurchases.tsx": "b7785a6ea0b13b17404f473ec61bf624b4524007aed627f8bd1299fd303db656",
+    "tests/test_v014_integration.py": "a7ee59e00b28a66cd604725fde3dae6bd9753ad4d8d824f9685734044a129bcd",
+    "tests/test_rossko_auto_requisite_resolution.py": "3338bae4df78ee41a924d2dfbc4941a2eaa97851905d58776398446518fd3f07"
+  },
+  "expected_after_sha256": {
+    "app/modules/marketplace/procurement.py": "6c851ebfb2bde56872284d17dca8614a261570d4f4c5a0370a6b5ddc26e22e06",
+    "app/main.py": "2b1891eef35a5d15bff4add16a234bbf677a1e600c0929c092f0a27ab7cb4685",
+    "pyproject.toml": "f54bf054cfefeddcc081ffdc0f9240c745a9e89ec14ed7b55badd2fcc74bcb33",
+    "app/presentation/operator_monitor.py": "91f5ca897a78ae5c3ee3fda4e951adf5b216d491fa9327ef9bbfb82eb253bd45",
+    "admin-ui/src/features/PurchaseAttemptDetail.tsx": "0345c8eac251c00f2be13ac856d0106d60ad3b42d39f11184731ab9ecd5b0ab8",
+    "admin-ui/src/pages/OrderPurchases.tsx": "8fbaaf481fea1052d7f78670f0a634596cc0a41066b7dd0298d74a1fabfca170",
+    "tests/test_v014_integration.py": "fa0e6e63bad1e623db749abb298437497857a0de8c4192996aa26197b2e8f631",
+    "tests/test_rossko_auto_requisite_resolution.py": "d9c0261194dedce0ef1a3695faa6eaac5cc0d1608aaa854e5b3bd22f7efa7a9c",
+    "app/modules/marketplace/purchase_lifecycle.py": "d9200ac6080de2fe0df1008d0b5ffbd07f9b3002602a39e6327240ee06615626",
+    "app/modules/marketplace/purchase_operations.py": "1646f890235ada00027b4b4ceff888b92674d2feddaf0841263af3d621c6be0f",
+    "migrations/versions/20261026_0036_supplier_purchase_reconciliation.py": "d2cb433975252d268245d8d2d21a1d6eb43bccf3b902326831f59d75c118c0b5",
+    "tests/test_supplier_purchase_lifecycle_v035.py": "73dfe46e355ac8355c83f167e4be8dbdcf8a6d4b7ec7fd2f9727a62804641d3a",
+    "docs/AUTOCODEX_V035_SUPPLIER_LIFECYCLE_RU.md": "27882e10d9cefdfa300a5f266cbc8b22dd8c143bad3547a9d887e7cce29f4570"
+  },
+  "alembic_migrations": [
+    "20261026_0036"
+  ],
+  "real_supplier_writes_newly_enabled": false,
+  "live_procurement_automation_enabled": false,
+  "test_run": "90 passed selected; full suite not completed",
+  "blocked_contracts": [
+    "ADEO order submit/status/cancel",
+    "PARTKOM live submit/status/cancel",
+    "Forum-Auto order lifecycle",
+    "ROSSKO cancellation",
+    "ROSSKO GetOrders RUB currency evidence"
+  ]
+}

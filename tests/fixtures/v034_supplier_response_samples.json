@@ -1,0 +1,13 @@
+{
+  "note": "Synthetic contract samples. NOT captured from live suppliers. All currencies explicitly asserted.",
+  "partkom": [
+    {"detailGroup":"Original", "maker":"TRIALLI", "number":"CF705", "makerId":19, "providerId":22, "placementId":"P-A", "minQuantity":2, "price": "492.275", "currency":"RUB", "quantity": 8, "guaranteedDays":2},
+    {"detailGroup":"Original", "maker":"TRIALLI", "number":"WRONG", "makerId":19, "providerId":22, "price":"1", "currency":"RUB"}
+  ],
+  "forum-auto": [
+    {"gid":"G1", "brand":"TRIALLI", "art":"CF 705", "price":"510.25", "currency":"643", "num":7, "d_deliv":3, "kr":2, "whse":"WH-F", "is_returnable":1}
+  ],
+  "rossko": {"success":true, "PartsList":{"Part":[
+    {"guid":"RG1", "brand":"TRIALLI", "partnumber":"CF705", "stocks":{"stock":[{"id":"W-A", "price":"505.00", "currency":"RUB", "count":5, "multiplicity":1, "delivery":2}]}}
+  ]}}
+}

@@ -12,6 +12,7 @@ from app.modules.finance.ledger_api import router as finance_f3_router
 from app.modules.finance.payment_sim_api import router as finance_f4_router
 from app.modules.finance.register_api import router as finance_f5_router
 from app.modules.marketplace.procurement import router as real_supplier_purchase_router
+from app.modules.marketplace.purchase_operations import router as supplier_purchase_operations_router
 from app.modules.commerce.sale_lifecycle import admin as sales_admin, buyer as sales_buyer
 from app.modules.commerce.quote_workflow import admin as operator_quote_admin, buyer as operator_quote_buyer
 from app.modules.commerce.operations_integrity import router as commerce_integrity_router
@@ -77,7 +78,7 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 try:
     api_version = package_version('autoparts-platform-v2')
 except PackageNotFoundError:
-    api_version = '0.33.2'  # local source checkout without installed wheel
+    api_version = '0.35.0'  # local source checkout without installed wheel
 
 app = FastAPI(title="Autoparts Platform v2", version=api_version, lifespan=lifespan)
 @app.middleware('http')
@@ -170,6 +171,7 @@ app.include_router(operator_quote_admin)
 app.include_router(operator_quote_buyer)
 app.include_router(commerce_integrity_router)
 app.include_router(real_supplier_purchase_router)
+app.include_router(supplier_purchase_operations_router)
 app.include_router(supplier_probe_router)
 app.include_router(seller_cabinet_router)
 app.include_router(admin_spa_router)

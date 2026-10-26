@@ -43,8 +43,8 @@ def test_for_account_uses_destination_mapping_not_global_address(monkeypatch):
     settings = SimpleNamespace(supplier_api_enabled=True, rossko_key1='ONE',rossko_key2='TWO',
                                rossko_delivery_id='WRONG',rossko_address_id='WRONG')
     monkeypatch.setattr(account_credentials,'get_settings',lambda: settings)
-    account=SimpleNamespace(credential_profile='default')
-    dest=SimpleNamespace(external_address_id='ADDRESS_FROM_DB',
+    account=SimpleNamespace(credential_profile='default',id='account-test')
+    dest=SimpleNamespace(id='destination-test',external_address_id='ADDRESS_FROM_DB',
                          external_delivery_id='000000002',external_requisite_id='39619')
     cfg=for_account('rossko',account,dest)
     assert (cfg.rossko_delivery_id,cfg.rossko_address_id,cfg.rossko_requisite_id)==(

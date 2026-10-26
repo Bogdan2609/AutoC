@@ -37,7 +37,8 @@ def for_account(code, account, destination=None):
         if destination.external_address_id:
             values['rossko_address_id'] = destination.external_address_id
         values['rossko_requisite_id'] = getattr(destination, 'external_requisite_id', None)
-    return SimpleNamespace(**values, supplier_api_enabled=settings.supplier_api_enabled)
+    return SimpleNamespace(**values, supplier_api_enabled=settings.supplier_api_enabled,
+                           supplier_account_scope=f"{account.id}:{destination.id if destination else 'none'}")
 
 
 def ready(code, account, destination=None):

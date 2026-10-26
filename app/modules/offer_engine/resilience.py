@@ -1,7 +1,7 @@
-"""Bounded retries and a circuit breaker for idempotent supplier READ operations.
+"""Per-account circuit breakers and bounded retry for supplier READ operations.
 
-NEVER use with create_order, checkout, refund or other external writes: an
-ambiguous timeout requires durable reconciliation, not a second submit.
+Do not wrap order submission, cancellation, checkout, payment or refund in
+bounded_read. An ambiguous external WRITE requires reconciliation, not retry.
 """
 from __future__ import annotations
 
@@ -9,14 +9,18 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass
+from functools import wraps
 from typing import Awaitable, Callable, TypeVar
+
 import httpx
-from .supplier_errors import NetworkError, UpstreamBusinessError, Unavailable
+
+from .supplier_errors import NetworkError, Unavailable, UpstreamBusinessError
 
 T = TypeVar('T')
 
 
 def classify_http(response: httpx.Response) -> None:
+    # No exception / response body attached: URLs may include supplier secrets.
     if response.status_code >= 500 or response.status_code in (408, 429):
         raise NetworkError('Supplier temporarily unavailable')
     if response.status_code >= 400:
@@ -57,47 +61,71 @@ class CircuitBreaker:
 async def bounded_read(
     operation: Callable[[], Awaitable[T]], *, breaker: CircuitBreaker,
     attempts: int = 3, total_timeout: float = 18.0,
-    base_delay: float = 0.15, sleeper=asyncio.sleep, jitter=random.uniform,
+    base_delay: float = 0.15,
+    sleeper=asyncio.sleep, jitter=random.uniform,
 ) -> T:
-    if attempts < 1 or total_timeout <= 0:
+    if attempts < 1 or total_timeout <= 0 or base_delay < 0:
         raise ValueError('Invalid supplier read budget')
     probe = breaker.enter()
+    finished = False
+
+    def finish(*, success: bool, retryable: bool = True) -> None:
+        nonlocal finished
+        if not finished:
+            breaker.finish(probe, success=success, retryable=retryable)
+            finished = True
+
     async def task() -> T:
         for attempt in range(attempts):
             try:
-                result = await operation()
-                breaker.finish(probe, success=True)
-                return result
-            except (httpx.TimeoutException, httpx.TransportError, TimeoutError) as exc:
+                value = await operation()
+            except (httpx.TimeoutException, httpx.TransportError, TimeoutError):
                 failure = NetworkError('Supplier transport failed')
-                # Never chain httpx exceptions: query URLs may contain Forum credentials.
-            except NetworkError as exc:
-                failure = exc
+            except NetworkError as error:
+                failure = error
             except Unavailable:
-                breaker.finish(probe, success=False, retryable=False)
+                finish(success=False, retryable=False)
                 raise
             except Exception:
-                breaker.finish(probe, success=False, retryable=False)
+                finish(success=False, retryable=False)
                 raise
+            else:
+                finish(success=True)
+                return value
             if attempt == attempts - 1 or probe:
-                breaker.finish(probe, success=False)
+                finish(success=False)
                 raise failure from None
             await sleeper(base_delay * (2 ** attempt) + jitter(0, base_delay))
         raise AssertionError('Unreachable')
+
     try:
         return await asyncio.wait_for(task(), timeout=total_timeout)
-    except TimeoutError as exc:
-        breaker.finish(probe, success=False)
-        raise NetworkError('Supplier read budget exceeded') from exc
+    except asyncio.CancelledError:
+        # Prevent a cancelled half-open probe from blocking this account forever.
+        finish(success=False)
+        raise
+    except TimeoutError:
+        finish(success=False)
+        raise NetworkError('Supplier read budget exceeded') from None
 
 
-BREAKERS: dict[str, CircuitBreaker] = {}
+# A breaker is shared only within its account/destination. A broken account A
+# must not open the circuit of another account B of the same supplier.
+BREAKERS: dict[tuple[str, str], CircuitBreaker] = {}
+
 
 def protected_search(adapter_class):
-    """Decorator applied to real supplier search methods, per-process per code."""
     original = adapter_class.search
+
+    @wraps(original)
     async def search(self, brand, article, config=None):
-        breaker = BREAKERS.setdefault(self.code, CircuitBreaker())
-        return await bounded_read(lambda: original(self, brand, article, config), breaker=breaker)
+        # This value is an internal UUID-based scope, *never* a credential.
+        # Legacy/default provider calls intentionally have their own scope.
+        scope = getattr(config, 'supplier_account_scope', None) if config is not None else None
+        key = (self.code, str(scope) if scope is not None else 'default')
+        breaker = BREAKERS.setdefault(key, CircuitBreaker())
+        return await bounded_read(
+            lambda: original(self, brand, article, config), breaker=breaker)
+
     adapter_class.search = search
     return adapter_class

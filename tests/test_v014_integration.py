@@ -151,6 +151,7 @@ async def test_rossko_explicit_checkout_is_idempotent(client,admin_headers,monke
         await record_paid_fulfillment(db,order,[line])
         await db.commit()
         line_id=str(line.id)
+        paid_order_id=str(order.id)
     payload={'order_line_id':line_id,'snapshot_id':snap_id,'destination_id':dest,'quantity':1,
         'approved_unit_price':'1800.00','client_ref':'order_v14_unique_0001',
         'contact_name':'Test Customer','contact_phone':'79001234567','payment_id':'1','requisite_id':'39619'}
@@ -193,10 +194,32 @@ async def test_rossko_explicit_checkout_is_idempotent(client,admin_headers,monke
     ack={'client_ref':payload['client_ref'],'confirmation':'PLACE_REAL_SUPPLIER_ORDER'}
     confirmation=await client.post(P+'/'+ident+'/confirm',headers=admin_headers,json=ack)
     assert confirmation.status_code==200,confirmation.text
-    assert confirmation.json()['status']=='accepted'
+    assert confirmation.json()['status']=='accepted_unverified'
     assert confirmation.json()['remote_order_ids']==['9876543']
     confirmation=await client.post(P+'/'+ident+'/confirm',headers=admin_headers,json=ack)
     assert confirmation.json()['sent_again'] is False
+    assert count['orders']==1
+    # A SOAP ACK is not verified fulfillment. Read-only GetOrders must prove
+    # the exact paid SKU, quantity and price before supplier_confirmed.
+    from app.modules.marketplace import purchase_operations
+    async def readback(*args, **kwargs):
+        return {'OrdersResult': {'success': True, 'OrdersList': {'Order': [
+            {'id': '9876543', 'parts': {'part': [{
+                'brand': 'BOSCH', 'partnumber': '0986479088', 'count': 1,
+                'price': '1800.00', 'currency': 'RUB', 'comment': paid_order_id,
+            }]}}
+        ]}}}
+    monkeypatch.setattr(purchase_operations, 'read_rossko_orders', readback)
+    result=await client.post(P+'/'+ident+'/reconcile',headers=admin_headers)
+    assert result.status_code==200,result.text
+    assert result.json()['status']=='verified',result.json()
+    reused=await client.post(P+'/'+ident+'/reconcile',headers=admin_headers)
+    assert reused.json()['reused'] is True
+    first=await client.post(P+'/'+ident+'/request-cancellation',headers=admin_headers)
+    assert first.status_code==200,first.text
+    assert first.json()['supplier_cancelled'] is False
+    second=await client.post(P+'/'+ident+'/request-cancellation',headers=admin_headers)
+    assert second.status_code==200 and second.json()['reused'] is True
     assert count['orders']==1
     get_settings.cache_clear()
 

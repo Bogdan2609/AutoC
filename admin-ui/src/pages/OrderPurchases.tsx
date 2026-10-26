@@ -11,7 +11,7 @@ import {dateText,shortId} from '@/lib/utils'
 import {PurchaseAttemptInspector} from '@/features/PurchaseAttemptDetail'
 
 type PurchaseAttempt={id:string;order_id:string|null;order_line_id:string|null;account_id:string;destination_id:string;status:string;remote_order_ids:string[];error_code:string|null;created_at:string}
-const risky=new Set(['manual_review','dispatch_unknown','unknown','sent_unverified','supplier_rejected','rejected'])
+const risky=new Set(['manual_review','dispatch_unknown','unknown','sent_unverified','supplier_rejected','rejected','accepted_unverified','accepted','reconciling'])
 export function OrderPurchases({orderId}:{orderId:string}){
  const [page,setPage]=useState(1)
  const [selected,setSelected]=useState<string|null>(null)

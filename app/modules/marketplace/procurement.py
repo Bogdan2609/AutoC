@@ -49,7 +49,7 @@ class SupplierPurchaseAttempt(Base):
     __table_args__ = (
         CheckConstraint('quantity > 0', name='purchase_attempt_quantity'),
         CheckConstraint('approved_unit_price > 0', name='purchase_attempt_price'),
-        CheckConstraint("status IN ('prepared','validating','dispatch_unknown','accepted','rejected','manual_review')",
+        CheckConstraint("status IN ('prepared','validating','dispatch_unknown','accepted','accepted_unverified','reconciling','verified','rejected','manual_review')",
                         name='purchase_attempt_status'),
         UniqueConstraint('order_line_id', name='uq_purchase_attempt_order_line'),
     )
@@ -74,6 +74,11 @@ class SupplierPurchaseAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reconcile_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reconcile_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 router = APIRouter(prefix='/api/v1/admin/supplier-purchases', tags=['supplier-purchases'],
@@ -293,7 +298,12 @@ def normalize_checkout_result(response):
     if not isinstance(order_ids,dict):return 'manual_review',[], 'unknown_response'
     ids=order_ids.get('id') or []
     if not isinstance(ids,list):ids=[ids]
-    ids=[str(x)[:100] for x in ids if str(x).strip()][:20]
+    if (len(ids) > 20 or any(isinstance(x, bool) or not str(x).isascii() or
+        not str(x).isdecimal() or int(str(x)) < 1 for x in ids)):
+        return 'manual_review',[], 'malformed_remote_order_ids'
+    ids=[str(x) for x in ids]
+    if len(ids) != len(set(ids)):
+        return 'manual_review',[], 'duplicate_remote_order_ids'
     errors=result.get('ItemsErrorList')
     if errors and (not isinstance(errors,dict) or errors.get('ItemError')):
         return 'manual_review',ids,'supplier_partial_rejection'
@@ -396,29 +406,27 @@ async def confirm(attempt_id:uuid.UUID, body:ConfirmPurchase,
     try:
         response=await checkout_rossko(config,item=item,detail=detail,dest=dest,request=attempt)
         status,ids,error=normalize_checkout_result(response)
-        attempt.status=status
+        # A checkout ACK is not proof of a verified order. The independent
+        # GetOrders reconciliation must confirm the SKU, quantity and price.
+        attempt.status='accepted_unverified' if status == 'accepted' else status
         attempt.remote_order_ids=ids
         attempt.error_code=error
         attempt.completed_at=now()
         if status == 'accepted':
-            proc.status = 'accepted'
-            proc.supplier_order_id = ids[0]
-            proc.error = None
-            execution.status = 'supplier_confirmed'
-            execution.fulfillment_reference = ids[0]
-            line.status = 'supplier_confirmed'
-            db.add(OrderWorkflowEvent(order_id=order.id, event_type='supplier_order_confirmed',
-                actor_type='system', evidence={'line_id': str(line.id),
-                                               'attempt_id': str(attempt.id),
-                                               'supplier_order_id': ids[0]}))
+            proc.status = 'manual_review'
+            execution.status = 'manual_review'
+            db.add(OrderWorkflowEvent(order_id=order.id,
+                event_type='supplier_checkout_acknowledged', actor_type='system',
+                evidence={'line_id': str(line.id), 'attempt_id': str(attempt.id),
+                          'requires_readback': True}))
             await reconcile_order(db, order)
         else:
             proc.status = 'manual_review'
             execution.status = 'manual_review'
             await reconcile_order(db, order)
         await db.commit()
-        return {'id':str(attempt.id),'status':status,'remote_order_ids':ids,
-                'reconciliation_required':status=='manual_review'}
+        return {'id':str(attempt.id),'status':attempt.status,'remote_order_ids':ids,
+                'reconciliation_required':True}
     except Exception:
         await db.rollback()
         record=await db.get(SupplierPurchaseAttempt,attempt_id)

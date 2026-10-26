@@ -192,9 +192,14 @@ async def test_two_accounts_same_supplier_never_merge_snapshot_context(client,ad
     resp=await client.get('/catalog?q=BOSCH+0986479088')
     assert resp.status_code==200,resp.text
     async for db in db_session():
-        jobs=(await db.scalars(select(Job).where(Job.kind=='search'))).all()
-        assert len(jobs)==2,[(j.kind,j.payload) for j in jobs]
+        all_jobs=(await db.scalars(select(Job).where(Job.kind=='search'))).all()
+        # Other suppliers are allowed to schedule their own legacy read-only
+        # jobs. Only PARTKOM is configured for independent API accounts here.
+        jobs=[j for j in all_jobs if j.payload['supplier']=='partkom']
+        assert len(jobs)==2,[(j.kind,j.payload) for j in all_jobs]
+        assert all(j.payload.get('account_id') and j.payload.get('destination_id') for j in jobs)
         assert len({j.payload['account_id'] for j in jobs})==2
+        assert len({j.payload['key'] for j in jobs})==2
         class PartkomFake:
             async def search(self,brand,article,config=None):
                 assert config.partkom_login in ('kz','ms')
