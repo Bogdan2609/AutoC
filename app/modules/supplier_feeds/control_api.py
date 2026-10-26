@@ -29,17 +29,18 @@ class PricePolicyInput(BaseModel):
     account_id: UUID
     destination_id: UUID
     warehouse_code: str = Field(min_length=1,max_length=140)
-    markup_percent: Decimal = Field(ge=0,le=1000,max_digits=8,decimal_places=2)
+    markup_percent: Decimal = Field(ge=0,le=500,max_digits=8,decimal_places=2)
     supplier_delivery: Decimal = Field(ge=0,max_digits=14,decimal_places=2)
+    last_mile_delivery: Decimal = Field(default=Decimal('0'),ge=0,max_digits=14,decimal_places=2)
     packaging: Decimal = Field(ge=0,max_digits=14,decimal_places=2)
     other_costs: Decimal = Field(ge=0,max_digits=14,decimal_places=2)
     tax_reserve: Decimal = Field(ge=0,max_digits=14,decimal_places=2)
-    sbp_percent: Decimal = Field(ge=0,lt=100,max_digits=7,decimal_places=3)
+    sbp_percent: Decimal = Field(ge=0,le=10,max_digits=7,decimal_places=3)
     sbp_fixed: Decimal = Field(ge=0,max_digits=14,decimal_places=2)
     min_contribution: Decimal = Field(ge=0,max_digits=14,decimal_places=2)
     evidence_reference: str = Field(min_length=12,max_length=300)
 
-FIELDS=('markup_percent','supplier_delivery','packaging','other_costs','tax_reserve','sbp_percent','sbp_fixed','min_contribution')
+FIELDS=('markup_percent','supplier_delivery','last_mile_delivery','packaging','other_costs','tax_reserve','sbp_percent','sbp_fixed','min_contribution')
 
 
 def pv(p):
@@ -114,9 +115,11 @@ async def approve_policy(policy_id:UUID,body:ApprovePolicy,db:AsyncSession=Depen
         FeedWarehouseMap.warehouse_code==p.warehouse_code,FeedWarehouseMap.approved.is_(True)))
     source=await db.get(FeedSource,p.supplier_code)
     if (not mapping or not source or not source.commercial_verified or source.price_kind!='purchase'
-        or source.currency!='RUB' or source.tax_status not in ('included','excluded')
+        or source.currency!='RUB' or source.tax_status!='included'
         or source.tax_status!=p.tax_status_verified):
         raise HTTPException(409,'Verify source commercial context, VAT, account/destination and warehouse mapping first')
+    if p.markup_percent > Decimal('500') or p.sbp_percent > Decimal('10'):
+        raise HTTPException(409,'Pricing rule exceeds reviewed markup or SBP commission limits')
     p.approved=True;p.updated_at=utc();await db.commit()
     return pv(p)
 

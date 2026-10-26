@@ -17,6 +17,7 @@ from app.modules.offer_engine.providers import PROVIDERS,Unavailable
 from app.modules.suppliers.models import Supplier,SupplierItem,OfferSnapshot
 from app.modules.payments.models import Payment,Refund
 from app.modules.payments.gateway import gateway
+from app.modules.payments.refund_reconciliation import validate_refund_response
 
 async def search(db, job):
     """Read-only provider search, no secrets or raw HTTP bodies in DB logs."""
@@ -282,10 +283,10 @@ async def refund(db,job):
  # Persist the uncertainty marker BEFORE the external side effect.
  ref.status='uncertain';await db.commit()
  remote=await gateway().refund(pay.provider_id,ref.amount,ref.id)
+ # A malformed or wrong-currency ACK leaves an 'uncertain' record. Never retry POST.
+ status=validate_refund_response(remote,refund_id=None,payment_id=pay.provider_id,amount=ref.amount)
  ref.provider_id=remote['id']
- if remote.get('status') not in ('pending','succeeded','canceled'):
-  raise ValueError('Unknown refund provider state')
- ref.status='provider_pending' if remote['status']=='pending' else remote['status']
+ ref.status='provider_pending' if status=='pending' else status
 
 async def replacement(db,job):
  rep=await db.get(Replacement,UUID(job.payload['id']))
@@ -300,10 +301,10 @@ async def one(factory=None):
    # Crash recovery: do not automatically retry purchase/refund calls with uncertain result.
    stalled=await db.scalar(select(Job).where(Job.status=='running',Job.due_at<utc()).order_by(Job.due_at).with_for_update(skip_locked=True))
    if stalled:
-    safe_retry = stalled.kind in ('search','feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization')
-    stalled.status='pending' if safe_retry and stalled.attempts < 5 else 'manual_review'
+    safe_retry = stalled.kind in ('search','feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization','payment_reconcile','refund_reconcile')
+    stalled.status='pending' if safe_retry and stalled.attempts < (12 if stalled.kind in ('payment_reconcile','refund_reconcile') else 5) else 'manual_review'
     stalled.last_error='worker_timeout_requires_reconciliation' if not safe_retry else (
-        'retry_budget_exhausted_manual_review' if stalled.attempts >= 5 else 'retry_backoff_after_timeout')
+        'retry_budget_exhausted_manual_review' if stalled.attempts >= (12 if stalled.kind in ('payment_reconcile','refund_reconcile') else 5) else 'retry_backoff_after_timeout')
     if stalled.status == 'pending':
      stalled.due_at=utc()+timedelta(minutes=min(2**max(1,stalled.attempts),60))
     await db.commit()
@@ -368,6 +369,9 @@ async def one(factory=None):
    elif kind=='payment_reconcile':
     from app.modules.payments.reconciliation import reconcile_payment_job
     await reconcile_payment_job(db,job)
+   elif kind=='refund_reconcile':
+    from app.modules.payments.refund_reconciliation import reconcile_refund_job
+    await reconcile_refund_job(db,job)
    elif kind=='marketplace_reservation_expire':
     from app.modules.marketplace.checkout_v017 import expire_reservation
     await expire_reservation(db,UUID(job.payload['order_id']))
@@ -377,7 +381,7 @@ async def one(factory=None):
     # must stay visible to operators, never disappear as a successful job.
     after = await db.get(Procurement, UUID(job.payload['id']))
     job.status = 'manual_review' if after and after.status == 'manual_review' else 'done'
-   elif kind!='payment_reconcile' or job.status=='running':
+   elif kind not in ('payment_reconcile','refund_reconcile') or job.status=='running':
     job.status='done'
    await db.commit()
    if kind=='search':
@@ -388,7 +392,7 @@ async def one(factory=None):
      await invalidate(state.product_id)
   except Exception as e:
    await db.rollback();job=await db.get(Job,job_id)
-   job.status='manual_review' if kind in ('procurement','refund','replacement','marketplace_reservation_expire','payment_reconcile') else 'failed'
+   job.status='manual_review' if kind in ('procurement','refund','replacement','marketplace_reservation_expire','payment_reconcile','refund_reconcile') else 'failed'
    job.last_error=type(e).__name__;await db.commit()
    logging.getLogger(__name__).warning('worker_job_failed job_id=%s kind=%s error_type=%s',
                                        job_id,kind,type(e).__name__)
@@ -401,6 +405,8 @@ async def _refresh_loop():
     await hot_refresh(session)
     from app.modules.payments.reconciliation import schedule_payment_reconciliation
     await schedule_payment_reconciliation(session)
+    from app.modules.payments.refund_reconciliation import schedule_refund_reconciliation
+    await schedule_refund_reconciliation(session)
     # Coarse health counters; log only operational aggregates, never job payloads.
     pending=await session.scalar(select(func.count()).select_from(Job).where(Job.status=='pending'))
     overdue=await session.scalar(select(func.count()).select_from(Job).where(

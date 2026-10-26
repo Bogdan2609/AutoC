@@ -25,7 +25,7 @@ class RuleInput(BaseModel):
     scope_kind: Literal['GLOBAL','MERCHANT','SUPPLIER','CATEGORY','BRAND','PRODUCT'] = 'GLOBAL'
     scope_id: uuid.UUID | None = None
     priority: int = Field(default=100,ge=0,le=100000)
-    markup_percent: Decimal = Field(default=Decimal('0'),ge=0,le=1000,max_digits=8,decimal_places=2)
+    markup_percent: Decimal = Field(default=Decimal('0'),ge=0,le=500,max_digits=8,decimal_places=2)
     fixed_markup: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     floor_price: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
     min_contribution: Decimal = Field(default=Decimal('0'),ge=0,max_digits=20,decimal_places=2)
@@ -59,6 +59,8 @@ class FeeInput(BaseModel):
     def check(self):
         if self.valid_until and self.valid_until < self.valid_from:raise ValueError('Invalid period')
         if self.valid_from.year<2026:raise ValueError('F2 supports periods from 2026 onwards')
+        if self.fee_kind=='SBP' and self.percent>Decimal('10'):
+            raise ValueError('SBP schedule must not exceed 10% without a new reviewed pricing policy')
         return self
 
 def rule_out(x:PricingRule):

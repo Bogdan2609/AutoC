@@ -78,7 +78,7 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 try:
     api_version = package_version('autoparts-platform-v2')
 except PackageNotFoundError:
-    api_version = '0.35.0'  # local source checkout without installed wheel
+    api_version = '0.37.0'  # local source checkout without installed wheel
 
 app = FastAPI(title="Autoparts Platform v2", version=api_version, lifespan=lifespan)
 @app.middleware('http')

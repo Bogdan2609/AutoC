@@ -7,6 +7,7 @@ an invented signature. RUB-only; multicurrency is a separate future epic.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import re
 import httpx
 from app.core.config import get_settings
 
@@ -27,6 +28,20 @@ def money(value) -> str:
         raise GatewayError('Invalid RUB amount') from exc
 
 
+def provider_reference(value) -> str:
+    """Only opaque provider object IDs, never arbitrary URL paths or query strings."""
+    if not isinstance(value, str) or re.fullmatch(r'[A-Za-z0-9_-]{1,150}', value) is None:
+        raise GatewayError('Invalid external payment reference')
+    return value
+
+
+def idempotence_key(value) -> str:
+    key = str(value) if value is not None else ''
+    if not 1 <= len(key) <= 64 or re.fullmatch(r'[A-Za-z0-9_-]+', key) is None:
+        raise GatewayError('Invalid idempotency key')
+    return key
+
+
 class YooKassa:
     def config(self):
         s = get_settings()
@@ -39,6 +54,8 @@ class YooKassa:
         return s
 
     async def call(self, method, path, body=None, key=None):
+        if method in ('POST', 'DELETE'):
+            key = idempotence_key(key)
         s = self.config()
         if s.app_env == 'test':
             raise GatewayError('Bank HTTP forbidden in test mode: use FakeYooKassa')
@@ -85,14 +102,14 @@ class YooKassa:
             'receipt':{'customer':{'email':email},'items':receipt}})
 
     async def status(self,provider_id):
-        return await self.call('GET','/payments/'+str(provider_id))
+        return await self.call('GET','/payments/'+provider_reference(provider_id))
 
     async def refund_status(self,provider_id):
-        return await self.call('GET','/refunds/'+str(provider_id))
+        return await self.call('GET','/refunds/'+provider_reference(provider_id))
 
     async def refund(self,payment_id,total,key):
-        return await self.call('POST','/refunds',key=key,body={
-            'payment_id':payment_id,'amount':{'value':money(total),'currency':'RUB'}})
+        return await self.call('POST','/refunds',key=idempotence_key(key),body={
+            'payment_id':provider_reference(payment_id),'amount':{'value':money(total),'currency':'RUB'}})
 
 
 class FakeYooKassa(YooKassa):
@@ -118,8 +135,9 @@ class FakeYooKassa(YooKassa):
             if item is None:
                 raise GatewayError('Fake provider object not found')
             return dict(item)
-        if method != 'POST' or path not in ('/payments','/refunds') or not key:
+        if method != 'POST' or path not in ('/payments','/refunds'):
             raise GatewayError('Invalid fake operation')
+        key = idempotence_key(key)
         from uuid import uuid5, NAMESPACE_URL
         from copy import deepcopy
         idem = (path,str(key))
@@ -140,6 +158,11 @@ class FakeYooKassa(YooKassa):
             self.refunds[ref] = record
         self.idempotency[idem] = (record,deepcopy(body))
         return dict(record)
+
+    def settle_refund(self, provider_id, *, succeeded: bool = True):
+        if get_settings().app_env != 'test':
+            raise GatewayError('Fake cannot settle outside test mode')
+        self.refunds[provider_reference(provider_id)]['status'] = 'succeeded' if succeeded else 'canceled'
 
     def settle(self, provider_id, *, succeeded: bool = True):
         if get_settings().app_env != 'test':

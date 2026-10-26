@@ -109,7 +109,7 @@ class FeedPriceRule(Base):
     __table_args__ = (
         UniqueConstraint('supplier_code','account_id','destination_id','warehouse_code',name='uq_feed_price_scope'),
         CheckConstraint('markup_percent >= 0 AND markup_percent <= 1000 AND sbp_percent >= 0 AND sbp_percent < 100',name='feed_price_percentage_bounds'),
-        CheckConstraint('supplier_delivery >= 0 AND packaging >= 0 AND other_costs >= 0 AND tax_reserve >= 0 AND sbp_fixed >= 0 AND min_contribution >= 0',name='feed_price_nonnegative_costs'),
+        CheckConstraint('supplier_delivery >= 0 AND last_mile_delivery >= 0 AND packaging >= 0 AND other_costs >= 0 AND tax_reserve >= 0 AND sbp_fixed >= 0 AND min_contribution >= 0',name='feed_price_nonnegative_costs'),
     )
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True),primary_key=True,default=uuid.uuid4)
     supplier_code: Mapped[str] = mapped_column(ForeignKey('feed_sources.code',ondelete='RESTRICT'),nullable=False)
@@ -121,6 +121,7 @@ class FeedPriceRule(Base):
     tax_status_verified: Mapped[str] = mapped_column(String(16),nullable=False)
     markup_percent: Mapped[Decimal] = mapped_column(Numeric(8,2),nullable=False)
     supplier_delivery: Mapped[Decimal] = mapped_column(Numeric(14,2),nullable=False)
+    last_mile_delivery: Mapped[Decimal] = mapped_column(Numeric(14,2),nullable=False,server_default="0")
     packaging: Mapped[Decimal] = mapped_column(Numeric(14,2),nullable=False)
     other_costs: Mapped[Decimal] = mapped_column(Numeric(14,2),nullable=False)
     tax_reserve: Mapped[Decimal] = mapped_column(Numeric(14,2),nullable=False)

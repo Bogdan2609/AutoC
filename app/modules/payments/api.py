@@ -50,6 +50,9 @@ async def verify_remote(db,payment):
   lines=(await db.scalars(select(OrderLine).where(OrderLine.order_id==order.id))).all()
   if not lines or order.total<=0 or any(x.quantity<=0 for x in lines):
    raise HTTPException(409,'No payable order lines')
+  # The verified bank total must match the immutable payable line snapshot.
+  if sum((x.unit_retail * x.quantity for x in lines), Decimal('0.00')) != order.total:
+   raise HTTPException(409,'Payable order line total mismatch')
   other=await db.scalar(select(Payment).where(Payment.order_id==order.id,
       Payment.id!=payment.id,Payment.status=='succeeded'))
   if other:raise HTTPException(409,'Multiple successful payments require manual reconciliation')
@@ -114,34 +117,25 @@ async def refund_queue(db:AsyncSession=Depends(get_session)):
     rows=(await db.scalars(select(Refund).where(
         Refund.status.in_(('uncertain','provider_pending','canceled')))
         .order_by(Refund.id).limit(100))).all()
+    keys = [f'refund_reconcile:{r.id}' for r in rows]
+    jobs = (await db.scalars(select(Job).where(Job.dedup_key.in_(keys)))).all() if keys else []
+    state = {j.dedup_key: j.status for j in jobs}
     return [{'refund_id':str(r.id),'status':r.status,
              'provider_reference_present':bool(r.provider_id),
-             'requires_manual_review':r.status in ('uncertain','canceled')} for r in rows]
+             'reconciliation_job_status':state.get(f'refund_reconcile:{r.id}'),
+             'requires_manual_review':(
+                 r.status=='canceled' or not r.provider_id or
+                 state.get(f'refund_reconcile:{r.id}')=='manual_review')
+            } for r in rows]
 
 
 @router.post('/admin/refunds/{refund_id}/reconcile', dependencies=[Depends(require_admin)])
-async def reconcile_refund(refund_id:UUID,db:AsyncSession=Depends(get_session)):
-    """Fetch authoritative refund status; missing provider ID requires manual portal audit."""
-    ref=await db.scalar(select(Refund).where(Refund.id==refund_id).with_for_update())
-    if not ref:raise HTTPException(404,'Refund not found')
-    if not ref.provider_id:
-        raise HTTPException(409,'Provider refund ID unknown; inspect acquiring portal manually, do not retry')
-    if ref.status=='succeeded':return {'refund_id':str(ref.id),'status':'succeeded'}
-    try:remote=await gateway().refund_status(ref.provider_id)
-    except GatewayError as exc:raise HTTPException(503,'Refund status uncertain') from exc
-    payment=await db.get(Payment,ref.payment_id)
-    amount=remote.get('amount',{})
-    if (remote.get('id')!=ref.provider_id or not payment or
-        remote.get('payment_id')!=payment.provider_id or
-        amount.get('currency')!='RUB' or
-        not _matches_money(amount.get('value'),ref.amount)):
-        raise HTTPException(409,'Refund identity or amount mismatch')
-    state=remote.get('status')
-    if state not in ('succeeded','pending','canceled'):
-        raise HTTPException(409,'Unknown provider refund state')
-    ref.status='provider_pending' if state=='pending' else state
+async def reconcile_refund(refund_id: UUID, db: AsyncSession = Depends(get_session)):
+    """Authoritative read-only check; never repeats the external refund POST."""
+    from app.modules.payments.refund_reconciliation import verify_refund_status
+    status = await verify_refund_status(db, refund_id, bank=gateway())
     await db.commit()
-    return {'refund_id':str(ref.id),'status':ref.status}
+    return {'refund_id': str(refund_id), 'status': status}
 
 
 @router.get('/admin/payments/needs-reconciliation', dependencies=[Depends(require_admin)])

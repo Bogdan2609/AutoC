@@ -11,7 +11,7 @@ HUNDRED=Decimal('100')
 
 
 def round_money(value: Decimal)->Decimal:
-    if not value.is_finite():
+    if not isinstance(value, Decimal) or not value.is_finite():
         raise ValueError('Money must be finite')
     return value.quantize(Q,rounding=ROUND_HALF_UP)
 
@@ -21,7 +21,8 @@ def simple_markup_quote(purchase_price: Decimal, markup_percent: Decimal) -> Dec
 
     This is an UNVERIFIED cost estimate, never a production landed-cost quote.
     """
-    if (not purchase_price.is_finite() or purchase_price < 0 or
+    if (not isinstance(purchase_price,Decimal) or not isinstance(markup_percent,Decimal) or
+            not purchase_price.is_finite() or purchase_price < 0 or
             not markup_percent.is_finite() or not Decimal('0') <= markup_percent <= Decimal('1000')):
         raise ValueError('Invalid gross purchase or markup')
     return round_money(purchase_price * (Decimal('1') + markup_percent/HUNDRED))
@@ -29,9 +30,9 @@ def simple_markup_quote(purchase_price: Decimal, markup_percent: Decimal) -> Dec
 
 def fee_amount(base: Decimal,percent: Decimal=Decimal('0'),fixed: Decimal=Decimal('0'),
                cap: Decimal|None=None, *, rounding: Literal['HALF_UP','CEILING']='HALF_UP')->Decimal:
-    if any(not n.is_finite() or n<0 for n in (base,percent,fixed)) or percent>100:
+    if any(not isinstance(n,Decimal) or not n.is_finite() or n<0 for n in (base,percent,fixed)) or percent>100:
         raise ValueError('Invalid fee')
-    if cap is not None and (not cap.is_finite() or cap<0):
+    if cap is not None and (not isinstance(cap,Decimal) or not cap.is_finite() or cap<0 or cap!=round_money(cap)):
         raise ValueError('Invalid cap')
     if rounding not in ('HALF_UP','CEILING'):
         raise ValueError('Unknown fee rounding')
@@ -60,7 +61,7 @@ def cost_coverage_quote(*, purchase_gross: Decimal, markup_percent: Decimal,
         raise ValueError('All pricing inputs must be finite nonnegative Decimals')
     if purchase_gross <= 0 or markup_percent > 1000 or sbp_percent >= 100:
         raise ValueError('Invalid purchase price, markup or SBP percent')
-    if sbp_cap is not None and (not isinstance(sbp_cap,Decimal) or not sbp_cap.is_finite() or sbp_cap<0):
+    if sbp_cap is not None and (not isinstance(sbp_cap,Decimal) or not sbp_cap.is_finite() or sbp_cap<0 or sbp_cap!=round_money(sbp_cap)):
         raise ValueError('Invalid SBP cap')
     total_costs=supplier_delivery+last_mile_delivery+packaging+other_costs+tax_reserve
     base=purchase_gross+total_costs
@@ -197,6 +198,9 @@ class PricePreview(BaseModel):
     rounding_tiers: list[RoundingTier] | None = None
     rounding_max_uplift_pct: Decimal | None = Field(default=None,ge=0,le=10,max_digits=5,decimal_places=2)
     price_ceiling: Decimal | None = Field(default=None,ge=0,max_digits=20,decimal_places=2)
+    # Optional commercial cap on price uplift over fully documented gross costs.
+    # It is a simulation guard, not a substitute for a verified tariff.
+    max_price_delta_pct: Decimal | None = Field(default=None,ge=0,le=500,max_digits=6,decimal_places=2)
     simulated: Literal[True] = True
 
     # Prevent catastrophically high simulated markup/bank-fee parameters.
@@ -208,7 +212,7 @@ class PricePreview(BaseModel):
         if self.rounding_tiers is not None:validate_rounding_tiers(self.rounding_tiers)
         if self.strategy=='COST_COVERAGE' and (self.sale_model!='OWN' or self.fixed_markup or self.floor_price or self.rounding_mode!='EXACT_RUB' or self.rounding_tiers is not None or self.rounding_max_uplift_pct is not None or self.price_ceiling is not None):
             raise ValueError('Cost coverage is OWN-only and incompatible with legacy floor/fixed markup/rounding')
-        if self.sale_model=='AGENCY' and (self.rounding_mode!='EXACT_RUB' or self.rounding_tiers is not None or self.rounding_max_uplift_pct is not None or self.price_ceiling is not None):
+        if self.sale_model=='AGENCY' and (self.rounding_mode!='EXACT_RUB' or self.rounding_tiers is not None or self.rounding_max_uplift_pct is not None or self.price_ceiling is not None or self.max_price_delta_pct is not None):
             raise ValueError('Agency prices are seller-controlled; platform rounding is forbidden')
         if self.sale_model=='OWN' and (self.marketplace_percent or self.marketplace_fixed):
             raise ValueError('Own sale must not treat marketplace seller fees as own income')
@@ -241,7 +245,7 @@ def calculate(req:PricePreview)->dict:
                       'rounding_mode':'COST_COVERAGE_KOPECK_UP','rounding_step_used':'0.01',
                       'rounding_uplift':'0.00','price_ceiling_met':True,'rounding_uplift_cap_met':True}
         else:
-            preliminary=max(req.floor_price,(req.source_gross+req.procurement_delivery+req.last_mile_delivery+req.packaging+req.other_costs)*(1+req.markup_percent/HUNDRED)+req.fixed_markup)
+            preliminary=max(req.floor_price,(req.source_gross+req.procurement_delivery+req.last_mile_delivery+req.packaging+req.other_costs+req.tax_reserve)*(1+req.markup_percent/HUNDRED)+req.fixed_markup)
             rounding=customer_price_rounding(preliminary, req.rounding_mode, req.rounding_tiers, req.rounding_max_uplift_pct, req.price_ceiling)
             customer=Decimal(rounding['customer_gross'])
         if not rounding['price_ceiling_met']:
@@ -251,6 +255,14 @@ def calculate(req:PricePreview)->dict:
         bank=Decimal(covered['bank_fee']) if req.strategy=='COST_COVERAGE' else fee_amount(customer,req.sbp_percent,req.sbp_fixed,req.sbp_cap)
         # All prices are gross until verified VAT scheme and rate are explicitly given.
         cash_contribution=round_money(customer-req.source_gross-costs-bank)
+        cash_floor_met=cash_contribution>=req.min_contribution
+        landed=round_money(req.source_gross+costs)
+        delta_cap_met=(req.max_price_delta_pct is None or
+            customer<=landed*(Decimal('1')+req.max_price_delta_pct/HUNDRED))
+        if not cash_floor_met:
+            warnings.append('Cash contribution is below the required minimum after logistics, reserve and SBP fees.')
+        if not delta_cap_met:
+            warnings.append('Customer price exceeds the specified maximum delta above landed gross costs.')
         if req.vat_scheme is not None:
             vat=vat_preview(PreviewInput(gross_amount=customer,operation_date=req.operation_date,sale_model='OWN',operation_kind='GOODS',vat_scheme=req.vat_scheme))
             output_vat=Decimal(vat['vat_amount'])
@@ -264,13 +276,16 @@ def calculate(req:PricePreview)->dict:
             warnings.append('Tax regime unknown: contribution net of sales VAT is not available.')
         floor_met=(contribution>=req.min_contribution) if contribution is not None else None
         if floor_met is False:
-            warnings.append('The planned minimum contribution is not met; preview does not silently raise the selling price.')
-        return {'status':'SIMULATION' if rounding['price_ceiling_met'] and rounding['rounding_uplift_cap_met'] else 'SIMULATION_CONSTRAINT_FAILED','sale_model':'OWN',**rounding, 'purchase_gross':str(req.source_gross),
+            warnings.append('The planned minimum contribution is not met after estimated VAT; preview is blocked.')
+        constraints_met=(rounding['price_ceiling_met'] and rounding['rounding_uplift_cap_met'] and
+                         cash_floor_met and delta_cap_met and floor_met is not False)
+        return {'status':'SIMULATION' if constraints_met else 'SIMULATION_CONSTRAINT_FAILED','sale_model':'OWN',**rounding, 'purchase_gross':str(req.source_gross),
                 'landed_cost_gross':str(round_money(req.source_gross+req.procurement_delivery+req.last_mile_delivery+req.packaging+req.other_costs+req.tax_reserve)),
                 'delivery_and_other_costs':str(costs),'bank_fee':str(bank),'platform_fee_gross':'0.00',
                 'seller_payout_gross':None,'cash_contribution_before_tax':str(cash_contribution),
                 'output_vat_estimate':vat_amount,'net_contribution_estimate':str(contribution) if contribution is not None else None,
-                'minimum_contribution_met':floor_met,'profit_after_income_tax':None,
+                'minimum_contribution_met':floor_met,'cash_minimum_contribution_met':cash_floor_met,
+                'max_price_delta_met':delta_cap_met,'profit_after_income_tax':None,
                 'bank_fee_bearer':'PLATFORM','warnings':warnings,'production_approved':False}
     customer=round_money(req.source_gross)
     marketplace=fee_amount(customer,req.marketplace_percent,req.marketplace_fixed,req.marketplace_cap)
@@ -294,5 +309,6 @@ def calculate(req:PricePreview)->dict:
             'platform_fee_gross':str(marketplace),'seller_payout_gross':str(seller_payout),
             'cash_contribution_before_tax':str(platform_cash),'output_vat_estimate':vat_amount,
             'net_contribution_estimate':str(net_estimate) if net_estimate is not None else None,
-            'minimum_contribution_met':None,'profit_after_income_tax':None,
+            'minimum_contribution_met':None,'cash_minimum_contribution_met':None,
+            'max_price_delta_met':None,'profit_after_income_tax':None,
             'bank_fee_bearer':req.bank_fee_bearer,'warnings':warnings,'production_approved':False}

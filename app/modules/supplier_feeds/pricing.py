@@ -29,14 +29,20 @@ def quote_unit(purchase_price, rule):
     purchase=money(purchase_price)
     costs={k:money(getattr(rule,k)) for k in
            ('supplier_delivery','packaging','other_costs','tax_reserve','sbp_fixed')}
+    # Existing in-memory test rules may predate the dedicated destination cost.
+    costs['last_mile_delivery']=money(getattr(rule,'last_mile_delivery',Decimal('0')))
+    if money(rule.markup_percent)>Decimal('500') or money(rule.sbp_percent)>Decimal('10'):
+        raise ValueError('Unreviewed excessive markup or SBP tariff in feed pricing policy')
     result=cost_coverage_quote(
         purchase_gross=purchase,markup_percent=money(rule.markup_percent),
-        supplier_delivery=costs['supplier_delivery'],packaging=costs['packaging'],
+        supplier_delivery=costs['supplier_delivery'],last_mile_delivery=costs['last_mile_delivery'],
+        packaging=costs['packaging'],
         other_costs=costs['other_costs'],tax_reserve=costs['tax_reserve'],
         sbp_percent=money(rule.sbp_percent),sbp_fixed=costs['sbp_fixed'],
         min_contribution=money(rule.min_contribution))
     return {'price':result['price'],'purchase_price':str(purchase),
-            'supplier_delivery':str(costs['supplier_delivery']),'packaging':str(costs['packaging']),
+            'supplier_delivery':str(costs['supplier_delivery']),
+            'last_mile_delivery':str(costs['last_mile_delivery']),'packaging':str(costs['packaging']),
             'other_costs':str(costs['other_costs']),'tax_reserve':str(costs['tax_reserve']),
             'sbp_fee':result['bank_fee'],'contribution':result['cash_contribution'],
             'target_contribution':result['target_contribution'],
@@ -58,5 +64,6 @@ async def active_rules_for(db, scope_tuples):
 def usable_rule(rule, source):
     return bool(rule and rule.approved and source.commercial_verified and
          source.price_kind=='purchase' and source.currency=='RUB' and
-         source.tax_status in ('included','excluded') and
+         # Gross-cost arithmetic cannot safely price VAT-exclusive supplier feeds.
+         source.tax_status == 'included' and
          source.tax_status==rule.tax_status_verified)
