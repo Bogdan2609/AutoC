@@ -14,6 +14,7 @@ from app.modules.catalog.normalize import normalize_brand,normalize_article
 from app.modules.commerce.models import Job,Procurement,OrderLine,Order,Replacement
 from app.modules.offer_engine.models import CacheState,OfferDetail,SupplierLog
 from app.modules.offer_engine.providers import PROVIDERS,Unavailable
+from app.integrations.suppliers.factory import SupplierFactory
 from app.modules.suppliers.models import Supplier,SupplierItem,OfferSnapshot
 from app.modules.payments.models import Payment,Refund
 from app.modules.payments.gateway import gateway
@@ -55,7 +56,7 @@ async def search(db, job):
             return
     if p.get('account_id'):
         from app.modules.marketplace.models import SupplierAccount, SupplierDestination, FulfillmentNode
-        from app.modules.marketplace.account_credentials import ready, for_account
+        from app.modules.marketplace.account_credentials import ready
         account = await db.get(SupplierAccount, UUID(p['account_id']))
         destination = await db.get(SupplierDestination,UUID(p['destination_id'])) if p.get('destination_id') else None
         supplier_for_account = await db.get(Supplier,account.supplier_id) if account else None
@@ -74,14 +75,24 @@ async def search(db, job):
         return
     # Commit DB reads before the outbound HTTP request: no held DB transaction.
     timeout = min(cfg.timeout_seconds,account.timeout_seconds) if account else cfg.timeout_seconds
-    provider_config = for_account(code,account,destination) if account else None
+    # Resolve the exact account/destination through the canonical v0.41 factory.
+    # No supplier API request is performed if the bound route is invalid.
+    from app.integrations.suppliers.factory import SupplierBindingError
+    try:
+        bound = SupplierFactory(PROVIDERS).for_search(
+            code, supplier=supplier_for_account if account else None,
+            account=account, destination=destination, node=node if account else None)
+    except SupplierBindingError:
+        state.status = 'disabled'
+        state.expires_at = utc() + timedelta(minutes=5)
+        return
     account_id = account.id if account else None
     await db.commit()
     success = False
     records = []
     error_type = None
     try:
-        records = await asyncio.wait_for(PROVIDERS[code].search(p['brand'],p['article'],provider_config) if account_id else PROVIDERS[code].search(p['brand'],p['article']),timeout=timeout)
+        records = await asyncio.wait_for(bound.search(p['brand'], p['article']), timeout=timeout)
         if len(records)>250:
             raise Unavailable('Supplier response exceeds search limit')
         success = True

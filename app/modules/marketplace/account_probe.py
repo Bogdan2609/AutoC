@@ -4,6 +4,7 @@ Does not mutate a supplier account, create an order, or trust invented addresses
 """
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import get_session
@@ -83,3 +84,92 @@ async def checkout_details(account_id:UUID,db:AsyncSession=Depends(get_session))
     except Exception:
         raise HTTPException(503,'ROSSKO account probe failed; check credentials and supplier portal') from None
     return {'account_id':str(a.id),'supplier':'rossko','read_only':True,**result}
+
+
+@router.get('/supplier-integrations/capabilities')
+async def supplier_integration_capabilities():
+    """Zero-network, zero-secrets supplier operation matrix."""
+    from app.integrations.suppliers.diagnostics import matrix
+    return matrix()
+
+
+@router.get('/supplier-accounts/{account_id}/integration-readiness')
+async def supplier_integration_readiness(account_id: UUID,
+                                         db: AsyncSession = Depends(get_session)):
+    """Local-only readiness per permitted warehouse/destination; not an API probe."""
+    from sqlalchemy import select
+    from app.modules.marketplace.models import SupplierDestination, FulfillmentNode
+    from app.integrations.suppliers.diagnostics import readiness
+    account = await db.get(SupplierAccount, account_id)
+    if account is None:
+        raise HTTPException(404, 'Supplier account not found')
+    supplier = await db.get(Supplier, account.supplier_id)
+    if supplier is None:
+        raise HTTPException(409, 'Supplier account has no organization')
+    destinations = (await db.scalars(select(SupplierDestination).where(
+        SupplierDestination.account_id == account.id).order_by(SupplierDestination.id))).all()
+    rows = []
+    for destination in destinations[:100]:
+        node = await db.get(FulfillmentNode, destination.node_id)
+        if node is None:
+            rows.append({'supplier': supplier.code, 'account_id': str(account.id),
+                         'destination_id': str(destination.id), 'node_id': str(destination.node_id),
+                         'ready': False, 'read_only': True, 'status': 'not_ready'})
+            continue
+        rows.append(readiness(supplier.code, supplier=supplier, account=account,
+                              destination=destination, node=node))
+    return {'supplier': supplier.code, 'account_id': str(account.id),
+            'read_only': True, 'checked_destinations': len(rows), 'items': rows,
+            'note': 'Local configuration only; not provider connectivity or purchase approval'}
+
+
+class SupplierOrderReadbackInput(BaseModel):
+    destination_id: UUID
+    external_reference: str = Field(min_length=1, max_length=80)
+
+
+@router.post('/supplier-accounts/{account_id}/order-readback')
+async def supplier_order_readback(account_id: UUID, body: SupplierOrderReadbackInput,
+                                  db: AsyncSession = Depends(get_session)):
+    """Explicit operator-initiated READ only. Never changes a purchase/order.
+
+    POST is used only to protect input from URL logs and trigger staff CSRF.
+    Reject any unverified account/destination before contacting the provider.
+    """
+    from app.integrations.suppliers.factory import SupplierFactory, SupplierBindingError
+    from app.integrations.suppliers.order_readback import (
+        ReadbackError, normalize_order, validate_reference)
+    from app.integrations.suppliers.order_transport import read_external_order
+    from app.modules.marketplace.models import SupplierDestination, FulfillmentNode
+    from app.modules.offer_engine.discovery import claim_supplier_budget
+    from app.core.config import get_settings
+    if not get_settings().supplier_api_enabled or get_settings().app_env == 'test':
+        raise HTTPException(403, 'Live supplier order reads disabled')
+    account = await db.get(SupplierAccount, account_id)
+    dest = await db.get(SupplierDestination, body.destination_id)
+    supplier = await db.get(Supplier, account.supplier_id) if account else None
+    node = await db.get(FulfillmentNode, dest.node_id) if dest else None
+    if not all((account, dest, supplier, node)):
+        raise HTTPException(404, 'Supplier route not found')
+    try:
+        ref = validate_reference(supplier.code, body.external_reference)
+        binding = SupplierFactory().for_search(
+            supplier.code,supplier=supplier,account=account,destination=dest,node=node)
+    except (ReadbackError, SupplierBindingError, ValueError):
+        raise HTTPException(409, 'Supplier readback route or order reference invalid') from None
+    if not binding.scoped:
+        raise HTTPException(409, 'Account-scoped readback required')
+    if not await claim_supplier_budget(supplier.code, str(account.id), account.requests_per_hour):
+        raise HTTPException(429, 'Supplier read budget exhausted')
+    config=binding.config
+    await db.commit()  # Never hold a database transaction across provider HTTP.
+    try:
+        raw=await read_external_order(supplier.code, config, ref)
+        result=normalize_order(supplier.code, ref, raw)
+    except Exception:
+        # Never surface supplier URL (Forum credentials may be in query),
+        # supplier raw XML/JSON, network diagnostics or private fields.
+        raise HTTPException(503, 'Supplier order readback unavailable or inconclusive') from None
+    return {'account_id': str(account.id), 'destination_id': str(dest.id),
+            **result.public(), 'stored_changes': False,
+            'operator_action': 'Verify buyer order, exact SKU, quantities and courier evidence separately'}

@@ -13,6 +13,7 @@ import httpx
 from app.core.config import get_settings
 from app.modules.catalog.normalize import normalize_article, normalize_brand
 from app.modules.suppliers.adapters.base import ReadAdapter
+from app.integrations.suppliers.registry import SupplierRegistry, UnsupportedSupplier
 from .contracts import Offer
 from .currency import require_rub, rub_amount
 from .http_pool import get_client
@@ -145,8 +146,8 @@ PROVIDERS = {
 
 def get_adapter(supplier_code: str):
     try:
-        return PROVIDERS[supplier_code]
-    except KeyError:
+        return SupplierRegistry(PROVIDERS).get(supplier_code)
+    except UnsupportedSupplier:
         raise UpstreamBusinessError('Unknown supplier code') from None
 
 

@@ -1,4 +1,4 @@
-name: AutoC v0.40 safety checks
+name: AutoC v0.41 safety and supplier gateway checks
 on:
   push:
     branches: [main, 'feature/**']
@@ -44,7 +44,7 @@ jobs:
           python-version: '3.14'
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --group dev
-      - run: uv run pytest -q tests/test_transaction_safety_v040.py tests/test_security_transactions_v038.py tests/test_postgres_lock_order_v040.py
+      - run: uv run pytest -q tests/test_transaction_safety_v040.py tests/test_security_transactions_v038.py tests/test_postgres_lock_order_v040.py tests/test_supplier_factory_v041.py
         env:
           APP_ENV: test
           SUPPLIER_API_ENABLED: 'false'

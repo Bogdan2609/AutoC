@@ -8,6 +8,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from app.modules.accounts.models import utc
+from app.integrations.suppliers.registry import SUPPLIER_CODES
 from app.modules.offer_engine.discovery import nested
 from app.modules.commerce.models import Job
 from app.modules.marketplace.models import SupplierAccount, SupplierDestination, FulfillmentNode
@@ -105,7 +106,7 @@ async def pending_account_refreshes(db, brand, article, *, city=None):
     Cached account destinations must not charge the public discovery budget.
     """
     count = 0
-    for code in ('rossko', 'adeo', 'partkom', 'forum-auto'):
+    for code in SUPPLIER_CODES:
         count += len(await refresh_candidates(db, code, brand, article, city=city))
     return count
 
@@ -114,7 +115,7 @@ async def enqueue_accounts(db, brand, article, product_id=None, *, city=None, fo
     now=utc()
     out=[]
     # Admin scoped refresh must not contact unrelated supplier accounts.
-    allowed = ('rossko','adeo','partkom','forum-auto')
+    allowed = SUPPLIER_CODES
     for code in allowed if codes is None else codes:
         if code not in allowed:
             continue
