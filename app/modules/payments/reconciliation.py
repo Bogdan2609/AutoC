@@ -62,6 +62,34 @@ async def schedule_payment_reconciliation(db, limit: int = 25) -> int:
     return len(candidates)
 
 
+async def schedule_missing_payment_attention(db, limit: int = 25) -> int:
+    """Persist operator attention for unknown external create outcomes.
+
+    A missing provider ID cannot be queried or recreated safely. The job is
+    informational and is deliberately created in manual_review, never executed.
+    """
+    limit = min(max(limit, 1), 100)
+    dedup = literal('payment_manual:') + cast(Payment.id, String)
+    rows = (await db.scalars(select(Payment).where(
+        Payment.status.in_(_UNSETTLED), Payment.provider_id.is_(None),
+        Payment.created_at <= utc() - timedelta(minutes=2),
+        ~exists(select(Job.id).where(Job.dedup_key == dedup)),
+    ).order_by(Payment.created_at, Payment.id).limit(limit))).all()
+    for payment in rows:
+        db.add(Job(dedup_key=f'payment_manual:{payment.id}',
+                   kind='payment_manual_review', status='manual_review', attempts=0,
+                   due_at=utc(), payload={'payment_id': str(payment.id)},
+                   last_error='external_payment_id_missing_portal_reconciliation_required'))
+    if not rows:
+        return 0
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        return 0
+    return len(rows)
+
+
 async def reconcile_payment_job(db, job: Job) -> None:
     """Re-query bank status and let the existing locked handler materialize once."""
     from uuid import UUID

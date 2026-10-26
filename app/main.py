@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from app.core.rate_limit import enforce_budget,peer_ip
+from app.core.bounded_requests import BoundedRequestMiddleware
 from app.modules.admin_staff.api import router as admin_staff_router
 from app.modules.analytics.api import router as analytics_a1_router
 from app.modules.analytics.a2 import router as analytics_a2_router
@@ -78,45 +78,10 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 try:
     api_version = package_version('autoparts-platform-v2')
 except PackageNotFoundError:
-    api_version = '0.38.0'  # local source checkout without installed wheel
+    api_version = '0.40.1'  # local source checkout without installed wheel
 
 app = FastAPI(title="Autoparts Platform v2", version=api_version, lifespan=lifespan)
-@app.middleware('http')
-async def bound_public_requests(request:Request,call_next):
-    path=request.url.path
-    is_expensive=(path.startswith('/api/v1/marketplace/products/') and
-        ('/offers' in path)) or (path.startswith('/api/v1/catalog-v021/categories/') and
-        path.endswith('/facets'))
-    is_webhook=(path=='/api/v1/payments/yookassa/webhook' and request.method=='POST')
-    media_type=request.headers.get('content-type','').split(';',1)[0].strip().lower()
-    is_json_write=(path.startswith('/api/') and request.method in ('POST','PUT','PATCH')
-                   and (not media_type or media_type=='application/json' or
-                        media_type.endswith('+json')))
-    if is_expensive or is_webhook or is_json_write:
-        # Bound every API JSON mutation before validation, even for streamed
-        # requests without Content-Length. Binary/multipart imports must have
-        # separate upload limits at ingress and their own route validation.
-        length=request.headers.get('content-length')
-        limit_bytes = 16384 if is_webhook else (65536 if is_expensive else 1048576)
-        if length is not None and (not length.isdecimal() or int(length)>limit_bytes):
-            return JSONResponse({'detail':'Request body too large'},status_code=413)
-        # Content-Length is not authoritative for chunked/streaming requests.
-        # Bound memory BEFORE parsing any untrusted JSON, even without a header.
-        collected = []
-        size = 0
-        async for chunk in request.stream():
-            size += len(chunk)
-            if size > limit_bytes:
-                return JSONResponse({'detail':'Request body too large'},status_code=413)
-            collected.append(chunk)
-        request._body = b''.join(collected)
-        if is_expensive or is_webhook:
-            try:
-                await enforce_budget('webhook' if is_webhook else 'public_costly',peer_ip(request),
-                    limit=60 if is_webhook else 20,period=60)
-            except HTTPException as exc:
-                return JSONResponse({'detail':exc.detail},status_code=exc.status_code,headers=exc.headers)
-    return await call_next(request)
+app.add_middleware(BoundedRequestMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 # New SPA is optional for source-only unit tests; Docker production build includes it.

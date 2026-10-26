@@ -143,7 +143,8 @@ def test_every_existing_admin_route_is_mapped():
     from app.core.security import require_admin
     def protected(dependant):
         return any(dep.call is require_admin or protected(dep) for dep in dependant.dependencies)
-    routes=[r for r in app.routes if hasattr(r, 'dependant')]
+    from fastapi.routing import APIRoute, iter_route_contexts
+    routes=[r for r in iter_route_contexts(app.routes) if isinstance(r.original_route, APIRoute)]
     guarded=[r for r in routes if protected(r.dependant)]
     assert len(guarded) >= 300
     assert all(resource_scope(r.path) is not None for r in guarded)

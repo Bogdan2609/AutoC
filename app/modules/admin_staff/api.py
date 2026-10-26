@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.rate_limit import enforce_budget, peer_ip
+from app.core.utc_time import as_utc
 from app.core.security import require_admin
 from app.modules.accounts.models import User, utc
 from app.modules.admin_staff.models import AdminAuditLog, AdminStaff, AdminLoginSession
@@ -63,9 +64,7 @@ async def _session_staff(db: AsyncSession, raw: str):
     session = await db.scalar(select(AdminLoginSession).where(AdminLoginSession.digest == digest, AdminLoginSession.revoked.is_(False)))
     if session is None:
         raise HTTPException(401, 'Сеанс сотрудника завершён')
-    expiry = session.expires_at
-    if expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=timezone.utc)
+    expiry = as_utc(session.expires_at)
     if expiry <= utc():
         raise HTTPException(401, 'Сеанс сотрудника истёк')
     user = await db.get(User, session.user_id)
@@ -129,8 +128,7 @@ async def list_my_sessions(request: Request, db: AsyncSession = Depends(get_sess
     now = utc()
     return [{'id': str(record.id), 'created_at': record.created_at.isoformat(),
              'expires_at': record.expires_at.isoformat(), 'current': record.digest == digest}
-            for record in records if (record.expires_at.replace(tzinfo=timezone.utc)
-            if record.expires_at.tzinfo is None else record.expires_at) > now]
+            for record in records if as_utc(record.expires_at) > now]
 
 
 @router.post('/sessions/revoke-others', dependencies=[Depends(require_admin)])

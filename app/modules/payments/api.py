@@ -9,6 +9,8 @@ from app.modules.accounts.api import current_user
 from app.modules.accounts.models import User
 from app.modules.commerce.models import Order,OrderLine,Procurement,Job
 from app.modules.payments.models import Payment,Refund
+from app.modules.payments.selection import selected_payment_stmt
+from app.modules.payments.money_contract import payable_total
 from app.core.security import require_admin
 from app.modules.payments.gateway import gateway,GatewayError, money as rub_money
 router=APIRouter(prefix='/api/v1/payments',tags=['sbp-payments'])
@@ -61,7 +63,7 @@ async def verify_remote(db,payment):
   if not lines or order.total<=0 or any(x.quantity<=0 for x in lines):
    raise HTTPException(409,'No payable order lines')
   # The verified bank total must match the immutable payable line snapshot.
-  if sum((x.unit_retail * x.quantity for x in lines), Decimal('0.00')) != order.total:
+  if payable_total((x.unit_retail, x.quantity) for x in lines) != order.total:
    raise HTTPException(409,'Payable order line total mismatch')
   other=await db.scalar(select(Payment).where(Payment.order_id==order.id,
       Payment.id!=payment.id,Payment.status=='succeeded'))
@@ -90,39 +92,35 @@ async def webhook(body:dict,db:AsyncSession=Depends(get_session)):
  if not isinstance(pid,str) or len(pid)>150:return {'received':True}
  payment=await db.scalar(select(Payment).where(Payment.provider_id==pid))
  if not payment:return {'received':True}
- # Coalesce concurrent notifications before expensive remote verification.
- # A lock is advisory; authoritative provider verification remains mandatory.
+ # Coalescing is advisory; never acknowledge an in-flight duplicate as settled.
+ # Bank GET + PostgreSQL row locks are authoritative.
  from app.modules.offer_engine.cache import redis_client
  from app.core.config import get_settings
+ from app.core.redis_lease import RedisLease
  import hashlib
  redis=await redis_client()
- key='apv2:payment:webhook:'+hashlib.sha256(pid.encode()).hexdigest()
- lease=False
+ lease=None
  if redis is not None:
+  key='apv2:payment:webhook:'+hashlib.sha256(pid.encode()).hexdigest()
   try:
-   lease=bool(await redis.set(key,'inflight',nx=True,ex=15))
-   if not lease:return {'received':True}
-  except Exception:
-   raise HTTPException(503,'Webhook budget unavailable')
+   lease=await RedisLease.acquire(redis,key,ttl=60)
+  except Exception as exc:
+   raise HTTPException(503,'Webhook coalescing temporarily unavailable') from exc
+  if lease is None:
+   raise HTTPException(503,'Payment notification already being verified; retry')
  elif get_settings().app_env!='test':
-  raise HTTPException(503,'Webhook budget unavailable')
+  raise HTTPException(503,'Webhook coalescing unavailable')
  try:
   await verify_remote(db,payment)
- except Exception:
-  if lease:
-   try:await redis.delete(key)
-   except Exception:pass
-  raise
- if lease and payment.status not in ('succeeded','canceled'):
-  # Do not suppress a later webhook when provider status has not settled.
-  try:await redis.delete(key)
-  except Exception:pass
+ finally:
+  if lease is not None:
+   await lease.release()
  return {'received':True}
 @router.post('/orders/{order_id}/refresh')
 async def refresh(order_id:UUID,user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
  order=await db.get(Order,order_id)
  if not order or order.user_id!=user.id:raise HTTPException(404,'Order not found')
- pay=await db.scalar(select(Payment).where(Payment.order_id==order.id))
+ pay=await db.scalar(selected_payment_stmt(order.id))
  if not pay:raise HTTPException(409,'Payment not created')
  return await verify_remote(db,pay)
 

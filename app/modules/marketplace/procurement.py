@@ -311,6 +311,24 @@ def normalize_checkout_result(response):
     return 'manual_review',ids,'supplier_no_confirmed_order_ids'
 
 
+@router.get('/attention')
+async def unresolved_supplier_attempts(db: AsyncSession = Depends(get_session)):
+    # Read-only evidence, with no network, refund, or outbound supplier write.
+    records = (await db.scalars(select(SupplierPurchaseAttempt).where(
+        SupplierPurchaseAttempt.status.in_((
+            'validating', 'dispatch_unknown', 'manual_review',
+            'accepted_unverified', 'reconciling')))
+        .order_by(SupplierPurchaseAttempt.created_at).limit(100))).all()
+    return [{'attempt_id': str(a.id), 'status': a.status,
+             'supplier_account_id': str(a.supplier_account_id),
+             'destination_id': str(a.supplier_destination_id),
+             'created_at': a.created_at.isoformat() if a.created_at else None,
+             'sent_at': a.sent_at.isoformat() if a.sent_at else None,
+             'error_code': a.error_code, 'external_write_retry_allowed': False,
+             'operator_action': 'Verify worker and supplier read-only; never blind resubmit'}
+            for a in records]
+
+
 @router.post('/{attempt_id}/confirm')
 async def confirm(attempt_id:uuid.UUID, body:ConfirmPurchase,
                   db:AsyncSession=Depends(get_session)):

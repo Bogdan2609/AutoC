@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
 from app.core.db import get_session
+from app.core.utc_time import as_utc
 from app.modules.accounts.models import User, utc
 from app.modules.admin_staff.models import AdminAuditLog, AdminStaff, AdminLoginSession
 from app.modules.admin_staff.policy import resource_scope, role_allowed
@@ -49,9 +50,7 @@ async def require_admin(request: Request, x_admin_token: str | None = Header(def
         session = await db.scalar(select(AdminLoginSession).where(AdminLoginSession.digest == digest, AdminLoginSession.revoked.is_(False)))
         if session is None:
             raise HTTPException(401, 'Сеанс сотрудника завершён')
-        expires = session.expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+        expires = as_utc(session.expires_at)
         if expires < utc():
             raise HTTPException(401, 'Сеанс сотрудника истёк')
         user = await db.get(User, session.user_id)

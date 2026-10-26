@@ -53,6 +53,19 @@ async def test_supplier_line_to_delivery_and_repeated_reconciliation(client, adm
     assert (await client.post(endpoint,json={'target':'supplier_confirmed','evidence':'supplier order 310310', 'reference':'310310'})).status_code == 403
     assert (await client.post(endpoint,headers=admin_headers,json={
         'target':'delivered','evidence':'cannot skip ahead','reference':'shipment-1'})).status_code == 409
+    # A pending procurement cannot be confirmed on operator testimony alone.
+    premature = await client.post(endpoint, headers=admin_headers, json={
+        'target': 'supplier_confirmed', 'evidence': 'supplier order confirmed',
+        'reference': 'rossko-123'})
+    assert premature.status_code == 409
+    # Simulate the explicit operator-review boundary; do not relax production.
+    async for db in app.dependency_overrides[get_session]():
+        proc = await db.scalar(select(Procurement).where(Procurement.order_line_id == line_id))
+        assert proc is not None and proc.status == 'pending'
+        proc.status = 'manual_review'
+        proc.error = 'test_operator_review_required'
+        await db.commit()
+        break
     stages=[('supplier_confirmed','supplier order confirmed','rossko-123'),
             ('fulfillment_ready','goods inspected on arrival',None),
             ('dispatched','carrier handed over shipment','carrier-shipment-432'),

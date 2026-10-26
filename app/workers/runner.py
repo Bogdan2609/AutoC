@@ -423,6 +423,8 @@ async def _refresh_loop():
     await hot_refresh(session)
     from app.modules.payments.reconciliation import schedule_payment_reconciliation
     await schedule_payment_reconciliation(session)
+    from app.modules.payments.reconciliation import schedule_missing_payment_attention
+    await schedule_missing_payment_attention(session)
     from app.modules.payments.refund_reconciliation import schedule_refund_reconciliation
     await schedule_refund_reconciliation(session)
     # Coarse health counters; log only operational aggregates, never job payloads.

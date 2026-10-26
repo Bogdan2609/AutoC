@@ -1,0 +1,66 @@
+name: AutoC v0.40 safety checks
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+
+jobs:
+  python-and-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --group dev
+      - run: uv run python -m compileall -q app tests
+      - run: uv run pytest -q
+        env:
+          APP_ENV: test
+          SUPPLIER_API_ENABLED: 'false'
+          SUPPLIER_PROCUREMENT_ENABLED: 'false'
+          REAL_SUPPLIER_CHECKOUT_ENABLED: 'false'
+  postgres-races:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: testonly
+          POSTGRES_USER: autoc_test
+          POSTGRES_DB: autoc_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U autoc_test -d autoc_test"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --group dev
+      - run: uv run pytest -q tests/test_transaction_safety_v040.py tests/test_security_transactions_v038.py tests/test_postgres_lock_order_v040.py
+        env:
+          APP_ENV: test
+          SUPPLIER_API_ENABLED: 'false'
+          SUPPLIER_PROCUREMENT_ENABLED: 'false'
+          REAL_SUPPLIER_CHECKOUT_ENABLED: 'false'
+          TEST_DATABASE_URL: postgresql+psycopg://autoc_test:testonly@localhost:5432/autoc_test
+          REDIS_URL: redis://localhost:6379/0
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build

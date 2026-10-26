@@ -13,6 +13,8 @@ from app.modules.suppliers.models import Supplier,SupplierItem,OfferSnapshot
 from app.modules.pricing.service import get_active_policy,calculate_retail
 from app.modules.commerce.models import Cart,CartLine,Order,OrderLine,Procurement,Replacement,Job
 from app.modules.payments.models import Payment,Refund
+from app.modules.payments.selection import selected_payment_stmt
+from app.modules.payments.money_contract import payable_total
 from app.modules.payments.settlement import queue_replacement_refund
 from app.modules.payments.gateway import gateway,GatewayError
 from app.core.config import get_settings
@@ -97,6 +99,8 @@ async def checkout(body:Checkout,idempotency_key:str=Header(alias='Idempotency-K
  # Do not create a buyer order unless an SBP payment can be initiated.
  try:gateway().config()
  except GatewayError as exc:raise HTTPException(503,str(exc)) from exc
+ # Serialize even first use of an idempotency key for this user.
+ await db.scalar(select(User).where(User.id==user.id).with_for_update())
  request_fingerprint=payload_hash({'user':str(user.id),'workflow':'sbp_checkout',
                                    'payload':body.model_dump()})
  existing=await db.scalar(select(Order).where(Order.user_id==user.id,Order.idempotency_key==idempotency_key))
@@ -107,7 +111,7 @@ async def checkout(body:Checkout,idempotency_key:str=Header(alias='Idempotency-K
           existing.contact!=body.contact or existing.phone!=body.phone or
           existing.shipping_address!=body.shipping_address))):
    raise HTTPException(409,'Idempotency key already belongs to a different checkout request')
-  pay=await db.scalar(select(Payment).where(Payment.order_id==existing.id))
+  pay=await db.scalar(selected_payment_stmt(existing.id))
   return {'order_id':str(existing.id),'status':existing.status,'sbp_url':pay.payment_url if pay else None,'reused':True}
  cart=await open_cart(db,user,False)
  if cart is None:raise HTTPException(409,'Empty cart')
@@ -138,11 +142,16 @@ async def checkout(body:Checkout,idempotency_key:str=Header(alias='Idempotency-K
  # Lock cart only when committing; external HTTP calls have already completed.
  locked=await db.scalar(select(Cart).where(Cart.id==cart.id).with_for_update())
  if not locked or locked.revision!=revision or locked.status!='open':raise HTTPException(409,'Cart changed; revalidate')
- total=sum((x[-1]*x[0].quantity for x in validated),Decimal('0'))
+ total=payable_total((x[-1],x[0].quantity) for x in validated)
  order=Order(user_id=user.id,idempotency_key=idempotency_key,total=total,
              request_fingerprint=request_fingerprint,
              request_details={'workflow':'sbp_checkout','payment_contract':'test_only'},
-             **body.model_dump());db.add(order);await db.flush()
+             **body.model_dump());db.add(order)
+ try:
+  await db.flush()
+ except IntegrityError as exc:
+  await db.rollback()
+  raise HTTPException(409,'Concurrent checkout with this idempotency key; retry safely') from exc
  fiscal_items=[]
  for line,item,product,supplier,snap,live,price in validated:
   db.add(OrderLine(order_id=order.id,supplier_item_id=item.id,snapshot_id=snap.id,title=product.name,

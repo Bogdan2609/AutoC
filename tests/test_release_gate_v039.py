@@ -21,7 +21,8 @@ def test_release_gate_reports_truthful_no_go_without_live_evidence():
     flags = {key: 'false' for key in DANGEROUS_FLAGS}
     report = inspect(ROOT, {**flags, 'APP_ENV': 'development'})
     assert report['release'] == RELEASE
-    assert report['static_status'] == 'PASS'
+    assert report['static_status'] == 'BLOCK'  # historical gate rejects upgraded version
+    assert next(x['status'] for x in report['checks'] if x['name']=='version') == 'BLOCK'
     assert report['live_money_decision'] == 'NO_GO'
     assert all(check['status'] == 'NOT_TESTED' for check in report['checks'] if check['name'] in (
         'supplier_contracts', 'payment_sandbox', 'postgres_races', 'db_migration_applied'))
@@ -51,7 +52,8 @@ def test_prod_security_baseline_is_fail_closed():
          'PUBLIC_BASE_URL':'https://shop.example.invalid',
          'ADMIN_API_TOKEN':'x'*32, 'POSTGRES_PASSWORD':'y'*32,
          'BROWSER_CSRF_SECRET':'z'*32, 'ADMIN_LEGACY_TOKEN_ENABLED': 'false'})
-    assert good['static_status'] == 'PASS'
+    assert good['static_status'] == 'BLOCK'  # v0.39 release gate is intentionally historical
+    assert next(x['status'] for x in good['checks'] if x['name']=='production_configuration') == 'PASS'
     assert good['live_money_decision'] == 'NO_GO'
 
 
@@ -106,5 +108,6 @@ def test_staff_only_production_does_not_require_legacy_token():
     result = inspect(ROOT, {**flags, 'APP_ENV':'production', 'PUBLIC_BASE_URL':'https://shop.example.invalid',
         'ADMIN_API_TOKEN':'', 'POSTGRES_PASSWORD':'a'*40, 'BROWSER_CSRF_SECRET':'b'*40,
         'ADMIN_LEGACY_TOKEN_ENABLED':'false'})
-    assert result['static_status']=='PASS'
+    assert result['static_status']=='BLOCK'  # v0.39 release gate is intentionally historical
+    assert next(x['status'] for x in result['checks'] if x['name']=='production_configuration') == 'PASS'
     assert result['live_money_decision']=='NO_GO'

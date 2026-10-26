@@ -9,8 +9,10 @@ from app.presentation import admin_spa
 
 def test_new_admin_route_exists():
     from app.main import app
-    assert any(getattr(route, 'path', '') == '/admin' for route in app.routes)
-    assert any(getattr(route, 'path', '') == '/operator' for route in app.routes)
+    from fastapi.routing import iter_route_contexts
+    paths = {r.path for r in iter_route_contexts(app.routes)}
+    assert '/admin' in paths
+    assert '/operator' in paths
 
 
 def test_admin_missing_build_is_explicit_503(tmp_path, monkeypatch):

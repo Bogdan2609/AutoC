@@ -9,7 +9,8 @@ UI=ROOT/'admin-ui'/'src'
 
 def test_old_and_new_admin_routes_coexist():
     from app.main import app
-    paths={getattr(r,'path','') for r in app.routes}
+    from fastapi.routing import iter_route_contexts
+    paths={r.path for r in iter_route_contexts(app.routes) if r.path is not None}
     assert '/operator' in paths
     assert '/admin' in paths
 

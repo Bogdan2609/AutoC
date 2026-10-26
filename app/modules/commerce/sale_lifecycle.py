@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, Uuid, UniqueConstraint, select, update
 from sqlalchemy.orm import Mapped, mapped_column
@@ -20,6 +20,7 @@ from app.modules.accounts.api import current_user
 from app.modules.accounts.models import User
 from app.modules.commerce.models import Order, OrderLine, Procurement, Job, OrderWorkflowEvent
 from app.modules.payments.models import Payment, Refund
+from app.modules.payments.money_contract import payable_total
 from app.modules.marketplace.models import InventoryBalance, InventoryMovement, SellerOffer, FulfillmentNode
 
 
@@ -93,7 +94,7 @@ async def record_paid_fulfillment(db, order: Order, lines: list[OrderLine]):
     """
     if not lines or any(line.order_id != order.id or line.quantity < 1 for line in lines):
         raise HTTPException(409, 'Incomplete order lines')
-    if sum((Decimal(str(x.unit_retail)) * x.quantity for x in lines), Decimal('0')) != order.total:
+    if payable_total((x.unit_retail, x.quantity) for x in lines) != order.total:
         # Legacy test-only checkout does not have shipping; final money must match exactly.
         raise HTTPException(409, 'Frozen line amounts do not match the payment')
     for line in lines:
@@ -281,7 +282,7 @@ async def consume_reserved_stock(db, line):
 
 @admin.post('/orders/{order_id}/lines/{line_id}/reconcile')
 async def operator_transition(order_id: uuid.UUID, line_id: uuid.UUID, body: ReconcileLine,
-                              db=Depends(get_session)):
+                              request: Request, db=Depends(get_session)):
     order = await db.scalar(select(Order).where(Order.id == order_id).with_for_update())
     line = await db.get(OrderLine, line_id)
     if not order or not line or line.order_id != order.id:
@@ -304,7 +305,7 @@ async def operator_transition(order_id: uuid.UUID, line_id: uuid.UUID, body: Rec
     if body.target == 'supplier_confirmed':
         proc = await db.scalar(select(Procurement).where(
             Procurement.order_line_id == line.id).with_for_update())
-        if not proc or proc.status not in ('manual_review', 'pending', 'accepted'):
+        if not proc or proc.status not in ('manual_review', 'accepted'):
             raise HTTPException(409, 'Supplier procurement must exist and be reviewed')
         # Reconciliation requires human-supplied supplier evidence; this does not
         # claim that the supplier API verified it automatically.
@@ -332,7 +333,11 @@ async def operator_transition(order_id: uuid.UUID, line_id: uuid.UUID, body: Rec
     db.add(OrderWorkflowEvent(order_id=order.id,
         event_type='fulfillment_' + body.target, actor_type='admin',
         evidence={'line_id': str(line.id), 'execution_id': str(execution.id),
-                  'reference': body.reference, 'evidence': body.evidence}))
+                  'reference': body.reference, 'evidence': body.evidence,
+                  'confirmation_source': ('operator_attestation' if body.target == 'supplier_confirmed' else None),
+                  'api_verified': False,
+                  'actor_user_id': str(getattr(request.state, 'admin_actor_id', '') or ''),
+                  'actor_kind': getattr(request.state, 'admin_actor_kind', 'unknown')}))
     await reconcile_order(db, order)
     await db.commit()
     return {'line_id': str(line.id), 'status': body.target, 'order_status': order.status,

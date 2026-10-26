@@ -7,7 +7,7 @@ It never makes HTTP requests, changes grants or exposes credentials.
 from __future__ import annotations
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 
 from app.core.security import require_admin
 from app.modules.admin_staff.policy import resource_scope
@@ -45,11 +45,19 @@ def route_audit(app: FastAPI) -> dict:
     duplicates: list[str] = []
     registered: set[tuple[str, str]] = set()
     protected_routes = 0
+    inspected_api_routes = 0
 
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
+    # FastAPI >=0.137 preserves included routers as a tree, not flattened
+    # APIRoute instances in app.routes. Effective RouteContext accounts for
+    # inclusion prefixes and dependencies (including include_router(Depends)).
+    # Never return a false-positive RBAC PASS from an empty inspection.
+    for route in iter_route_contexts(app.routes):
+        if not isinstance(route.original_route, APIRoute):
             continue
+        inspected_api_routes += 1
         path = route.path
+        if not isinstance(path, str):
+            raise RuntimeError('FastAPI route inspection lacks effective path')
         if resource_scope(path):
             protected_routes += 1
         for method in sorted(route.methods or ()):
@@ -69,7 +77,8 @@ def route_audit(app: FastAPI) -> dict:
                     unguarded.append(f'{method} {path}')
 
     return {
-        'policy_complete': not (uncovered or unguarded or duplicates),
+        'policy_complete': bool(inspected_api_routes) and not (uncovered or unguarded or duplicates),
+        'inspected_api_routes': inspected_api_routes,
         'protected_routes': protected_routes,
         'unclassified_admin_routes': sorted(uncovered),
         'unguarded_classified_routes': sorted(unguarded),

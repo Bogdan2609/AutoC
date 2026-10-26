@@ -2,6 +2,7 @@ import hashlib,secrets
 import anyio
 from fastapi import Request
 from app.core.rate_limit import enforce_budget,peer_ip
+from app.core.utc_time import as_utc
 from datetime import timedelta,timezone
 from argon2 import PasswordHasher,exceptions
 from fastapi import APIRouter,Depends,Header,HTTPException
@@ -33,7 +34,7 @@ async def current_user(authorization:str|None=Header(default=None),db:AsyncSessi
  if not authorization or not authorization.startswith('Bearer ') or len(authorization[7:])!=64:raise HTTPException(401,'Bearer authentication required')
  digest=hashlib.sha256(authorization[7:].encode()).hexdigest()
  token=await db.scalar(select(Session).where(Session.digest==digest,Session.revoked.is_(False)))
- if token is None or token.expires_at.replace(tzinfo=timezone.utc)<utc():raise HTTPException(401,'Session expired')
+ if token is None or as_utc(token.expires_at)<utc():raise HTTPException(401,'Session expired')
  user=await db.get(User,token.user_id)
  if user is None or not user.is_active:raise HTTPException(401,'User disabled')
  return user
@@ -70,5 +71,5 @@ async def addresses(user:User=Depends(current_user),db:AsyncSession=Depends(get_
 @router.post('/logout',status_code=204)
 async def logout(authorization:str=Header(),user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
  digest=hashlib.sha256(authorization[7:].encode()).hexdigest()
- token=await db.scalar(select(Session).where(Session.digest==digest))
+ token=await db.scalar(select(Session).where(Session.digest==digest,Session.user_id==user.id))
  if token:token.revoked=True;await db.commit()

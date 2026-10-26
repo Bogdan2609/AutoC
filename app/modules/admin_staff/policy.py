@@ -88,7 +88,12 @@ def resource_scope(path: str) -> str | None:
 
 
 def role_allowed(role: str, scope: str, method: str) -> bool:
-    allowed = READ if method in ('GET','HEAD','OPTIONS') else WRITE
+    if method in ('GET', 'HEAD', 'OPTIONS'):
+        allowed = READ
+    elif method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        allowed = WRITE
+    else:
+        return False  # Unknown HTTP verbs never silently inherit WRITE.
     return role in allowed and ('*' in allowed[role] or scope in allowed[role])
 
 
