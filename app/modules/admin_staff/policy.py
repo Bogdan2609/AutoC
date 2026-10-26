@@ -8,6 +8,7 @@ ROLES = ('owner', 'operator', 'catalog_manager', 'supplier_manager', 'finance_ma
 # Scopes are ordered: narrowest URL prefixes before wider ones.
 _SCOPES = (
     ('/api/v1/admin/staff/sessions', 'sessions'),
+    ('/api/v1/admin/staff/change-password', 'sessions'),
     ('/api/v1/admin/staff', 'staff'),
     ('/api/v1/admin/supplier-purchases', 'purchases'),
     ('/api/v1/admin/commerce', 'orders'),
@@ -49,12 +50,14 @@ _SCOPES = (
     ('/api/v1/backoffice/catalog-v021', 'catalog'),
     ('/api/v1/backoffice/finance', 'finance'),
     ('/api/v1/backoffice/analytics', 'analytics'),
+    ('/api/v1/backoffice/monitor/purchases', 'purchases'),
+    ('/api/v1/backoffice/monitor/orders', 'orders'),
     ('/api/v1/backoffice/monitor/attention', 'analytics'),
     ('/api/v1/backoffice/monitor/configuration', 'analytics'),
     ('/api/v1/backoffice/monitor/receiving-readiness', 'analytics'),
     ('/api/v1/backoffice/monitor', 'system'),
     ('/api/v1/backoffice/offer-engine', 'suppliers'),
-    ('/api/v1/backoffice/operations', 'operations'),
+    ('/api/v1/backoffice/operations', 'orders'),  # order detail and replacement proposal (not purchase dispatch)
 )
 # All listed role scopes include read access; write is a separate grant.
 READ = {

@@ -31,7 +31,28 @@ export function clearOperatorAuth(){operatorToken=null;activeStaff=null;csrf=nul
 export class ApiError extends Error {
   constructor(readonly status:number, detail:string){super(detail);this.name='ApiError'}
 }
-async function parseApiError(resp:Response){let detail=`HTTP ${resp.status}`;try{const body:unknown=await resp.json();if(body&&typeof body==='object'&&'detail' in body&&typeof body.detail==='string')detail=body.detail}catch{/* no JSON */}return new ApiError(resp.status,detail)}
+async function parseApiError(resp:Response){
+ let detail=`HTTP ${resp.status}`
+ try{
+  const body:unknown=await resp.json()
+  if(body&&typeof body==='object'&&'detail' in body){
+   const payload=body.detail
+   if(typeof payload==='string')detail=payload
+   else if(payload&&typeof payload==='object'){
+    const data=payload as Record<string,unknown>
+    const code=typeof data.code==='string'?data.code:'Ошибка проверки'
+    const issues=Array.isArray(data.issues)?data.issues.slice(0,8).map((issue:unknown)=>{
+     if(!issue||typeof issue!=='object')return ''
+     const item=issue as Record<string,unknown>
+     const message=item.message??item.reason??item.code??item.field
+     return typeof message==='string'?message.slice(0,200):''
+    }).filter(Boolean):[]
+    detail=[code,...issues].join(': ').slice(0,1700)
+   }
+  }
+ }catch{/* malformed error response */}
+ return new ApiError(resp.status,detail)
+}
 export async function restoreStaffSession():Promise<boolean>{
  try{
   const resp=await fetch(`${STAFF}/session`,{credentials:'same-origin',cache:'no-store'})
@@ -68,6 +89,22 @@ export async function api<T>(path:string,init?:RequestInit):Promise<T>{
  }
  if(resp.status===204)return undefined as T
  return resp.json() as Promise<T>
+}
+/** Read authenticated media without placing legacy credentials in the URL.
+ * Object URLs returned by the caller must be revoked when no longer used.
+ */
+export async function apiBinary(path:string,signal?:AbortSignal):Promise<Blob>{
+ if(!operatorToken&&!activeStaff)throw new ApiError(401,'Выполните вход')
+ if(!path.startsWith('/api/v1/'))throw new Error('Запрещённый путь API')
+ if(activeStaff&&!canAccessPath(path))throw new ApiError(403,'Недостаточно прав для просмотра файла')
+ const headers=new Headers()
+ if(operatorToken)headers.set('X-Admin-Token',operatorToken)
+ const response=await fetch(path,{headers,signal,credentials:'same-origin',cache:'no-store'})
+ if(!response.ok){
+  if(response.status===401&&!operatorToken){clearOperatorAuth();window.dispatchEvent(new Event('autocodex-admin-auth-expired'))}
+  throw await parseApiError(response)
+ }
+ return response.blob()
 }
 export const qs=(params:Record<string,string|number|boolean|undefined>)=>{const s=new URLSearchParams();for(const [k,v] of Object.entries(params))if(v!==undefined&&v!=='')s.set(k,String(v));return s.toString()}
 export const WORKSPACE='/api/v1/backoffice/workspace'

@@ -71,3 +71,47 @@ export function Staff(){
   <Card><CardHeader><CardTitle className="flex items-center gap-2"><History size={18}/>Журнал административных действий</CardTitle><CardDescription>Фиксируются попытки изменить данные через защищённые административные API. Не является доказательством успешности каждой операции.</CardDescription></CardHeader><CardContent><Button variant="outline" onClick={()=>setAuditOpen(x=>!x)}>{auditOpen?'Скрыть':'Показать последние 40 записей'}</Button>{auditOpen&&(journal.isPending?<Loading/>:journal.error?<ErrorBox error={journal.error} onRetry={()=>void journal.refetch()}/>:<div className="mt-4 space-y-2">{journal.data?.map((entry,i)=><div key={`${entry.at}-${i}`} className="flex flex-wrap gap-2 rounded-lg border p-3 text-xs"><span>{new Date(entry.at).toLocaleString('ru-RU')}</span><strong>{entry.action}</strong><code className="break-all">{entry.path}</code><span className="text-muted-foreground">{entry.scope} · {entry.actor_kind}</span></div>)}</div>)}</CardContent></Card>
  </div>
 }
+
+/** Password rotation always invalidates every existing administrative session.
+ * No password or CSRF value is written to browser storage. */
+export function MySecurity(){
+ const client=useQueryClient()
+ const [currentPassword,setCurrentPassword]=useState('')
+ const [newPassword,setNewPassword]=useState('')
+ const [confirmation,setConfirmation]=useState('')
+ const [error,setError]=useState('')
+ const [busy,setBusy]=useState(false)
+ const available=Boolean(currentStaff())
+ async function submit(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();setError('')
+  if(!available){setError('Войдите с личной учётной записью сотрудника');return}
+  if(newPassword.length<12){setError('Новый пароль должен содержать не менее 12 символов');return}
+  if(newPassword!==confirmation){setError('Подтверждение не совпадает с новым паролем');return}
+  if(newPassword===currentPassword){setError('Новый пароль должен отличаться от текущего');return}
+  setBusy(true)
+  try{
+   await api<{status:string;sessions_revoked:boolean}>('/api/v1/admin/staff/change-password',{
+    method:'POST',body:JSON.stringify({current_password:currentPassword,new_password:newPassword})
+   })
+   setCurrentPassword('');setNewPassword('');setConfirmation('')
+   client.clear()
+   // The server has revoked every admin session and cleared the HttpOnly cookie.
+   // A full navigation discards all in-memory credentials and cached API data.
+   window.location.replace('/admin/')
+  }catch(e){setError(e instanceof Error?e.message:'Не удалось изменить пароль')}
+  finally{setBusy(false)}
+ }
+ return <div className="space-y-6">
+  <Heading title="Безопасность входа" description="Изменение личного пароля и принудительное завершение всех административных сеансов."/>
+  {!available?<Card><CardContent className="p-5 text-sm text-muted-foreground">Для смены пароля войдите по email и паролю сотрудника. Аварийный административный токен не подходит.</CardContent></Card>:
+  <Card className="max-w-xl"><CardHeader><CardTitle>Сменить пароль</CardTitle><CardDescription>После сохранения вход на всех устройствах завершится. Повторно войдите с новым паролем. Сеансы покупателей не затрагиваются.</CardDescription></CardHeader><CardContent>
+   <form className="space-y-4" onSubmit={submit}>
+    <label className="block space-y-1.5 text-sm font-medium">Текущий пароль<Input type="password" autoComplete="current-password" required maxLength={128} value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}/></label>
+    <label className="block space-y-1.5 text-sm font-medium">Новый пароль<Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={newPassword} onChange={e=>setNewPassword(e.target.value)}/><span className="block text-xs font-normal text-muted-foreground">Не менее 12 символов. Используйте уникальный пароль.</span></label>
+    <label className="block space-y-1.5 text-sm font-medium">Повторите новый пароль<Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirmation} onChange={e=>setConfirmation(e.target.value)}/></label>
+    {error&&<p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+    <Button disabled={busy||!currentPassword||!newPassword||!confirmation} type="submit">{busy?'Проверка и завершение сеансов…':'Обновить пароль и завершить сеансы'}</Button>
+   </form>
+  </CardContent></Card>}
+ </div>
+}

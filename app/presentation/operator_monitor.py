@@ -192,11 +192,14 @@ async def order_events(order_id: uuid.UUID, db: AsyncSession = Depends(get_sessi
 @router.get('/purchases')
 async def monitored_purchases(
     status: str = Query('', max_length=32),
+    order_id: uuid.UUID | None = Query(default=None),
     page: int = Query(1, ge=1, le=10000),
     size: int = Query(30, ge=1, le=100),
     db: AsyncSession = Depends(get_session),
 ):
     query = select(SupplierPurchaseAttempt)
+    if order_id is not None:
+        query = query.where(SupplierPurchaseAttempt.buyer_order_id == order_id)
     if status:
         query = query.where(SupplierPurchaseAttempt.status == status)
     total = int((await db.scalar(select(func.count()).select_from(query.subquery()))) or 0)
@@ -211,6 +214,35 @@ async def monitored_purchases(
         'status': a.status, 'remote_order_ids': a.remote_order_ids,
         'error_code': a.error_code, 'created_at': a.created_at.isoformat(),
     } for a in rows]}
+
+
+@router.get('/purchases/{attempt_id}')
+async def monitored_purchase_detail(attempt_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+    """Exact purchase attempt diagnostic. Never return buyer or receiving contacts,
+    payment credentials, secret requisites, or raw supplier responses.
+    No supplier API requests or procurement state changes are made here.
+    """
+    attempt = await db.get(SupplierPurchaseAttempt, attempt_id)
+    if attempt is None:
+        raise HTTPException(404, 'Purchase attempt not found')
+    return {
+        'id': str(attempt.id),
+        'order_id': str(attempt.buyer_order_id) if attempt.buyer_order_id else None,
+        'order_line_id': str(attempt.order_line_id) if attempt.order_line_id else None,
+        'account_id': str(attempt.supplier_account_id),
+        'destination_id': str(attempt.supplier_destination_id),
+        'status': attempt.status,
+        'remote_order_ids': attempt.remote_order_ids or [],
+        'error_code': attempt.error_code,
+        'quantity': attempt.quantity,
+        'created_at': attempt.created_at.isoformat(),
+        'sent_at': attempt.sent_at.isoformat() if attempt.sent_at else None,
+        'completed_at': attempt.completed_at.isoformat() if attempt.completed_at else None,
+        'manual_reconciliation_required': attempt.status in (
+            'dispatch_unknown', 'manual_review', 'rejected',
+        ),
+        'advisory': 'Recorded status is not live supplier confirmation. Do not retry unknown outcomes.',
+    }
 
 
 @router.get('/jobs')
