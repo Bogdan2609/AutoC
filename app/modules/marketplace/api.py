@@ -684,7 +684,9 @@ async def preview_supplier_quote(product_id:uuid.UUID,body:QuotePreviewRequest,
                                 db:AsyncSession=Depends(get_session)):
     """No supplier call, reservations, checkout or order; reconfirm scoped snapshot."""
     from app.modules.marketplace.quote_preview import quote_breakdown
-    raw=await marketplace_offers(product_id,city=None,pickup_node_id=body.pickup_node_id,db=db)
+    from app.modules.marketplace.quote_cache_v0421 import read_quoted_marketplace
+    raw=await read_quoted_marketplace(product_id,body.pickup_node_id,
+        lambda: marketplace_offers(product_id,city=None,pickup_node_id=body.pickup_node_id,db=db))
     matches=[r for r in raw['offers'] if
              r.get('source_kind')=='supplier_quote' and
              r.get('snapshot_id')==str(body.snapshot_id) and

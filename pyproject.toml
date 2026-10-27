@@ -1,6 +1,6 @@
 [project]
 name = "autoparts-platform-v2"
-version = "0.41.2"
+version = "0.44.0"
 description = "Modular monolith for an autoparts catalog and supplier offers"
 requires-python = ">=3.14,<3.15"
 dependencies = [

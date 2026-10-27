@@ -57,6 +57,8 @@ _SCOPES = (
     ('/api/v1/backoffice/monitor/receiving-readiness', 'analytics'),
     ('/api/v1/backoffice/monitor', 'system'),
     ('/api/v1/backoffice/offer-engine', 'suppliers'),
+    ('/api/v1/backoffice/operations-health', 'system'),  # read-only v0.43 operational dashboard
+    ('/api/v1/backoffice/preproduction-v044', 'system'),  # read-only release evidence
     ('/api/v1/backoffice/operations', 'orders'),  # order detail and replacement proposal (not purchase dispatch)
 )
 # All listed role scopes include read access; write is a separate grant.

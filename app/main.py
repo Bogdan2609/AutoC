@@ -19,6 +19,7 @@ from app.modules.commerce.operations_integrity import router as commerce_integri
 from app.modules.marketplace.account_probe import router as supplier_probe_router
 from app.modules.marketplace.api import admin as marketplace_admin, seller as marketplace_seller, public as marketplace_public
 from app.modules.marketplace.cart import router as marketplace_cart
+from app.modules.marketplace.data_integrity import router as marketplace_integrity_router
 from app.modules.marketplace.demo_orders import router as marketplace_demo
 from app.modules.marketplace.checkout_v017 import router as marketplace_checkout_v017,admin as marketplace_request_admin_v017
 from app.presentation.seller_cabinet import router as seller_cabinet_router
@@ -33,6 +34,9 @@ from app.presentation.backoffice import router as backoffice_router
 from app.presentation.operations import router as operations_router, ui_router as operator_ui_router
 from app.presentation.admin_workspace import router as operator_workspace_router
 from app.presentation.operator_monitor import router as operator_monitor_router
+from app.presentation.operations_health_v043 import router as operations_health_v043_router
+from app.presentation.preproduction_v044 import router as preproduction_v044_router
+from app.presentation.sbp_result_v043 import router as sbp_result_v043_router
 from app.presentation.catalog_editor import router as catalog_editor_router
 from app.presentation.admin_spa import router as admin_spa_router, DIST as ADMIN_DIST
 from app.modules.accounts.api import router as accounts_router
@@ -78,7 +82,7 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 try:
     api_version = package_version('autoparts-platform-v2')
 except PackageNotFoundError:
-    api_version = '0.41.2'  # local source checkout without installed wheel
+    api_version = '0.44.0'  # local source checkout without installed wheel
 
 app = FastAPI(title="Autoparts Platform v2", version=api_version, lifespan=lifespan)
 app.add_middleware(BoundedRequestMiddleware)
@@ -110,6 +114,9 @@ app.include_router(backoffice_router)
 app.include_router(operations_router)
 app.include_router(operator_workspace_router)
 app.include_router(operator_monitor_router)
+app.include_router(operations_health_v043_router)
+app.include_router(preproduction_v044_router)
+app.include_router(sbp_result_v043_router)
 app.include_router(catalog_editor_router)
 app.include_router(operator_ui_router)
 app.include_router(accounts_router)
@@ -134,6 +141,7 @@ app.include_router(marketplace_admin)
 app.include_router(marketplace_seller)
 app.include_router(marketplace_public)
 app.include_router(marketplace_cart)
+app.include_router(marketplace_integrity_router)
 app.include_router(marketplace_demo)
 app.include_router(marketplace_checkout_v017)
 app.include_router(marketplace_request_admin_v017)

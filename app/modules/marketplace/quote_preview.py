@@ -18,13 +18,18 @@ def quote_breakdown(variant, quantity, fulfillment):
     multiple = max(1, int(variant.get('pack_multiple') or 1))
     if quantity < min_qty or quantity % multiple:
         raise HTTPException(409, f'Supplier requires min quantity {min_qty} and pack multiple {multiple}')
-    unit = Decimal(str(variant['price']))
-    merchant_fee = Decimal(str(fulfillment.get('fee', '0.00')))
-    if unit < 0 or merchant_fee < 0:
-        raise HTTPException(409, 'Invalid nonnegative price or delivery fee')
+    from app.modules.marketplace.commercial_guardrails import checked_money
+    unit = checked_money(variant['price'], positive=True)
+    merchant_fee = checked_money(fulfillment.get('fee', '0.00'))
     goods = (unit * quantity).quantize(TWO, rounding=ROUND_HALF_UP)
     known = (goods + merchant_fee).quantize(TWO, rounding=ROUND_HALF_UP)
-    supplier_fee_known = fulfillment.get('supplier_fee_known') is True
+    # The Boolean alone does not quote a price: no payable total without an explicit fee.
+    supplier_fee_known = (fulfillment.get('supplier_fee_known') is True
+                          and fulfillment.get('supplier_delivery_fee') is not None)
+    supplier_fee = (checked_money(fulfillment['supplier_delivery_fee'])
+                    if supplier_fee_known else None)
+    if supplier_fee is not None:
+        known = (known + supplier_fee).quantize(TWO, rounding=ROUND_HALF_UP)
     pickup_selected = bool(fulfillment.get('pickup_node_id'))
     return {
         'source_kind': variant['source_kind'], 'supplier_code': variant.get('supplier_code'),
@@ -39,6 +44,7 @@ def quote_breakdown(variant, quantity, fulfillment):
         'merchant_delivery_fee': str(merchant_fee.quantize(TWO)),
         'known_components_total': str(known),
         'supplier_delivery_fee_known': supplier_fee_known,
+        'supplier_delivery_fee': str(supplier_fee) if supplier_fee is not None else None,
         'grand_total': str(known) if supplier_fee_known and pickup_selected else None,
         'final_price_complete': bool(supplier_fee_known and pickup_selected),
         'pickup_selected': pickup_selected,
@@ -47,6 +53,7 @@ def quote_breakdown(variant, quantity, fulfillment):
         'route_legs': fulfillment.get('route_legs', []),
         'route_node_ids': fulfillment.get('route_node_ids', []),
         'receiving_node': fulfillment.get('receiving_node'),
+        'receiving_node_id': fulfillment.get('receiving_node_id'),
         'pickup_node_id': fulfillment.get('pickup_node_id'),
         'requires_live_validation': True,
         'cart_enabled': False, 'payment_enabled': False,

@@ -1,9 +1,10 @@
 """Seller-offer cart support; not a reservation and not a payment."""
 import uuid
 from decimal import Decimal
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter,Depends,HTTPException,Request
+from app.core.rate_limit import enforce_budget,peer_ip
 from pydantic import BaseModel,Field
-from sqlalchemy import select
+from sqlalchemy import select,func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session
 from app.modules.accounts.api import current_user
@@ -12,6 +13,8 @@ from app.modules.commerce.api import open_cart
 from app.modules.commerce.models import CartLine
 from app.modules.marketplace.models import SellerOffer
 from app.modules.marketplace.service import offer_check,options_for_offer
+from app.modules.marketplace.commercial_guardrails import MAX_CART_LINES
+from app.modules.marketplace.cart_batch_v0421 import own_stock_preview_batch
 
 router=APIRouter(prefix='/api/v1/marketplace/cart',tags=['marketplace-cart'])
 
@@ -43,6 +46,9 @@ async def add_seller_line(body, user, db):
     if line:
         line.quantity=body.quantity
     else:
+        count=await db.scalar(select(func.count()).select_from(CartLine).where(CartLine.cart_id==cart.id))
+        if int(count or 0)>=MAX_CART_LINES:
+            raise HTTPException(409,'Cart item limit reached')
         line=CartLine(cart_id=cart.id,seller_offer_id=offer.id,
                       supplier_item_id=None,fulfillment_node_id=body.pickup_node_id,
                       quantity=body.quantity)
@@ -71,12 +77,22 @@ async def add_seller(body:AddSeller,user:User=Depends(current_user),db:AsyncSess
     return await add_seller_line(body,user,db)
 
 @router.get('/preview')
-async def preview(user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
+async def preview(request:Request,user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
+    await enforce_budget('marketplace_cart_preview',str(user.id)+':'+peer_ip(request),limit=30,period=60)
     cart=await open_cart(db,user,False)
     if not cart:return {'items':[],'total':'0.00','payment_enabled':False}
-    lines=(await db.scalars(select(CartLine).where(CartLine.cart_id==cart.id))).all()
+    lines=(await db.scalars(select(CartLine).where(CartLine.cart_id==cart.id).limit(MAX_CART_LINES+1))).all()
+    if len(lines)>MAX_CART_LINES:
+        raise HTTPException(409,'Cart exceeds item limit; remove items')
     results=[];total=Decimal('0')
+    own_stock = await own_stock_preview_batch(db, lines)
     for line in lines:
+        if line.id in own_stock:
+            result = own_stock[line.id]
+            results.append(result)
+            if result.get('unit_price') is not None:
+                total += Decimal(result['unit_price']) * line.quantity
+            continue
         if line.seller_offer_id:
             try:
                 offer=await offer_check(db,line.seller_offer_id)

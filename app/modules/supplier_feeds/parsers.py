@@ -23,10 +23,42 @@ MAX_FILE = 48 * 1024 * 1024
 MAX_XLSX_UNPACKED = 350 * 1024 * 1024
 MAX_XML = 260 * 1024 * 1024
 MAX_CELL_TEXT = 3000
+MAX_SHARED_STRINGS = 800_000
+MAX_XLSX_ROWS = 1_000_000
+MAX_CELLS_PER_ROW = 128
 
 
 class FeedFormatError(ValueError):
     pass
+
+
+class BoundedReader:
+    """Track ACTUAL decompressed bytes, independent from the ZIP directory."""
+    def __init__(self, raw, cap):
+        self.raw, self.cap, self.count = raw, cap, 0
+
+    def read(self, size=-1):
+        remaining = self.cap - self.count
+        # Read at most remaining + 1 to detect oversized content without allocation.
+        ask = remaining + 1 if size is None or size < 0 else min(size, remaining + 1)
+        chunk = self.raw.read(ask)
+        self.count += len(chunk)
+        if self.count > self.cap:
+            raise FeedFormatError('Actual decompressed archive member exceeds limit')
+        return chunk
+
+    def __getattr__(self, name):
+        return getattr(self.raw, name)
+
+
+def bounded_copy(source, target, *, limit):
+    source = BoundedReader(source, limit)
+    while True:
+        chunk = source.read(1024 * 1024)
+        if not chunk:
+            break
+        target.write(chunk)
+
 
 
 @dataclass(frozen=True)
@@ -180,7 +212,7 @@ def _xlsx_stream(path: Path):
             raise FeedFormatError('ROSSKO ZIP must contain exactly one XLSX')
         with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as temp:
             with outer.open(entries[0]) as source:
-                shutil.copyfileobj(source, temp, length=1024 * 1024)
+                bounded_copy(source, temp, limit=MAX_FILE)
             temp.seek(0)
             with ZipFile(temp) as book:
                 _safe_archive(book, max_size=MAX_XLSX_UNPACKED)
@@ -208,24 +240,30 @@ def _rossko(path: Path) -> Iterator[tuple[int, FeedRow | None, str | None]]:
             raise FeedFormatError('Unexpected ROSSKO workbook structure')
         strings: list[str] = []
         with book.open('xl/sharedStrings.xml') as data:
-            for _, el in iterparse(data, events=('end',)):
+            for _, el in iterparse(BoundedReader(data, MAX_XML), events=('end',)):
                 if el.tag == ns + 'si':
                     s = ''.join(t.text or '' for t in el.iter(ns + 't'))
                     if len(s) > MAX_CELL_TEXT:
                         raise FeedFormatError('Oversized string in workbook')
                     strings.append(s)
+                    if len(strings)>MAX_SHARED_STRINGS:
+                        raise FeedFormatError('Too many workbook shared strings')
                     el.clear()
         header = ['Номенклатура', 'Бренд', 'Артикул', 'Описание', 'Вес/Объем',
                   'Кратность отгрузки', 'Цена, руб.', 'Базовая цена, руб.', 'Наличие',
                   'Срок поставки, дн.', 'Каталожный номер', 'OEМ Номер', 'Применимость',
                   'Вендор-код', 'ТНВЭД', 'ОКПД 2', 'Подключен к ЧЗ', 'Склад']
         with book.open('xl/worksheets/sheet1.xml') as data:
-            for _, el in iterparse(data, events=('end',)):
+            for _, el in iterparse(BoundedReader(data, MAX_XML), events=('end',)):
                 if el.tag != ns + 'row':
                     continue
                 line = int(el.attrib.get('r') or '0')
+                if line > MAX_XLSX_ROWS:
+                    raise FeedFormatError('Workbook row limit exceeded')
                 cells: dict[int, str] = {}
-                for c in el.iter(ns + 'c'):
+                for index, c in enumerate(el.iter(ns + 'c')):
+                    if index>=MAX_CELLS_PER_ROW:
+                        raise FeedFormatError('Too many workbook cells in one row')
                     if c.find(ns + 'f') is not None:
                         raise FeedFormatError('Formula cell in supplier price file')
                     v = c.find(ns + 'v')

@@ -308,6 +308,7 @@ async def replacement(db,job):
   rep.status='manual_review' # Must re-verify alternative before binding procurement.
 
 async def one(factory=None):
+ from app.workers.job_lease_v043 import heartbeat, still_owner
  factory=factory or get_session_factory()
  async with factory() as db:
   job=await db.scalar(select(Job).where(Job.status=='pending',Job.due_at<=utc()).order_by(Job.due_at,Job.id).with_for_update(skip_locked=True))
@@ -315,7 +316,8 @@ async def one(factory=None):
    # Crash recovery: do not automatically retry purchase/refund calls with uncertain result.
    stalled=await db.scalar(select(Job).where(Job.status=='running',Job.due_at<utc()).order_by(Job.due_at).with_for_update(skip_locked=True))
    if stalled:
-    safe_retry = stalled.kind in ('search','feed_import','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization','payment_reconcile','refund_reconcile')
+    from app.workers.job_lease_v043 import REPLAYABLE
+    safe_retry = stalled.kind in REPLAYABLE
     if stalled.kind == 'feed_catalog_sync':
      # The pipeline commits its cursor while processing. Blindly replaying a
      # timed-out job can race the original worker and duplicate catalog work.
@@ -339,93 +341,102 @@ async def one(factory=None):
     await db.commit()
     return True
    return False
-  job.status='running';job.attempts+=1;job.due_at=utc()+timedelta(hours=2 if job.kind in ('feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization') else 0,minutes=5 if job.kind not in ('feed_import','feed_catalog_sync','catalog_bulk','catalog_enrichment','multi_enrichment','draft_materialization') else 0);job_id=job.id;kind=job.kind;await db.commit()
-  try:
-   if kind=='search':
-    from app.modules.offer_engine.service import aware, runtime
-    cfg=await runtime(db,job.payload['supplier'])
-    account = None
-    if job.payload.get('account_id'):
-     from app.modules.marketplace.models import SupplierAccount
-     account=await db.get(SupplierAccount,UUID(job.payload['account_id']))
-     if not account or not account.enabled or not account.read_enabled:
-      job.status='done';await db.commit();return True
-    block_until=max(filter(None,[aware(cfg.next_request_at),aware(cfg.circuit_open_until)]),default=utc())
-    if cfg.enabled and block_until>utc():
-     job.status='pending'
-     job.due_at=block_until
-     await db.commit()
-     return True
-    if cfg.enabled:
-     from app.modules.offer_engine.discovery import claim_supplier_budget
-     if not await claim_supplier_budget(job.payload['supplier'],
-           str(account.id) if account else None,account.requests_per_hour if account else None):
-      # Hourly cap reached, or Redis unavailable: no supplier HTTP call.
-      job.status='pending';job.due_at=utc()+timedelta(minutes=15)
-      state=await db.scalar(select(CacheState).where(
-       CacheState.supplier_code==job.payload['supplier'],
-       CacheState.lookup_key==job.payload['key']))
-      if state and state.status=='refreshing':
-       state.expires_at=job.due_at+timedelta(minutes=2)
+  from app.workers.job_lease_v043 import lease_duration
+  job.status='running';job.attempts+=1;job.due_at=utc()+lease_duration(job.kind);job_id=job.id;kind=job.kind;generation=job.attempts;await db.commit()
+  async with heartbeat(factory,job_id,generation,kind) as lost:
+   try:
+    if kind=='search':
+     from app.modules.offer_engine.service import aware, runtime
+     cfg=await runtime(db,job.payload['supplier'])
+     account = None
+     if job.payload.get('account_id'):
+      from app.modules.marketplace.models import SupplierAccount
+      account=await db.get(SupplierAccount,UUID(job.payload['account_id']))
+      if not account or not account.enabled or not account.read_enabled:
+       job.status='done';await db.commit();return True
+     block_until=max(filter(None,[aware(cfg.next_request_at),aware(cfg.circuit_open_until)]),default=utc())
+     if cfg.enabled and block_until>utc():
+      job.status='pending'
+      job.due_at=block_until
       await db.commit()
       return True
-     cfg.next_request_at=utc()+timedelta(seconds=cfg.min_interval_seconds)
-     await db.commit()
-    await search(db,job)
-   elif kind=='feed_import':
-    from app.modules.supplier_feeds.service import import_batch
-    await import_batch(db, UUID(job.payload['batch_id']))
-   elif kind=='feed_catalog_sync':
-    from app.modules.supplier_feeds.pipeline import run_sync
-    await run_sync(db,UUID(job.payload['sync_id']),int(job.payload['step']))
-   elif kind=='catalog_bulk':
-    from app.modules.catalog_bulk.service import execute_run
-    await execute_run(db, UUID(job.payload['run_id']))
-   elif kind=='catalog_enrichment':
-    from app.modules.catalog_enrichment.service import execute_run as execute_enrichment
-    await execute_enrichment(db, UUID(job.payload['run_id']))
-   elif kind=='multi_enrichment':
-    from app.modules.multi_enrichment.service import execute_run as execute_multi
-    await execute_multi(db, UUID(job.payload['run_id']))
-   elif kind=='draft_materialization':
-    from app.modules.draft_materialization.service import execute_run as execute_draft
-    await execute_draft(db, UUID(job.payload['run_id']),
-                        auto_step=job.payload.get('auto_step'),
-                        auto_generation=job.payload.get('auto_generation'))
-   elif kind=='procurement':await procurement(db,job)
-   elif kind=='refund':await refund(db,job)
-   elif kind=='replacement':await replacement(db,job)
-   elif kind=='payment_reconcile':
-    from app.modules.payments.reconciliation import reconcile_payment_job
-    await reconcile_payment_job(db,job)
-   elif kind=='refund_reconcile':
-    from app.modules.payments.refund_reconciliation import reconcile_refund_job
-    await reconcile_refund_job(db,job)
-   elif kind=='marketplace_reservation_expire':
-    from app.modules.marketplace.checkout_v017 import expire_reservation
-    await expire_reservation(db,UUID(job.payload['order_id']))
-   else:raise ValueError('Unknown job kind')
-   if kind == 'procurement':
-    # No external write contract: a reviewed-but-unplaced supplier purchase
-    # must stay visible to operators, never disappear as a successful job.
-    after = await db.get(Procurement, UUID(job.payload['id']))
-    job.status = 'manual_review' if after and after.status == 'manual_review' else 'done'
-   elif kind not in ('payment_reconcile','refund_reconcile') or job.status=='running':
-    job.status='done'
-   await db.commit()
-   if kind=='search':
-    from app.modules.offer_engine.cache import invalidate
-    state=await db.scalar(select(CacheState).where(
-     CacheState.supplier_code==job.payload['supplier'],CacheState.lookup_key==job.payload['key']))
-    if state and state.product_id:
-     await invalidate(state.product_id)
-  except Exception as e:
-   await db.rollback();job=await db.get(Job,job_id)
-   job.status='manual_review' if kind in ('procurement','refund','replacement','marketplace_reservation_expire','payment_reconcile','refund_reconcile') else 'failed'
-   job.last_error=type(e).__name__;await db.commit()
-   logging.getLogger(__name__).warning('worker_job_failed job_id=%s kind=%s error_type=%s',
-                                       job_id,kind,type(e).__name__)
-  return True
+     if cfg.enabled:
+      from app.modules.offer_engine.discovery import claim_supplier_budget
+      if not await claim_supplier_budget(job.payload['supplier'],
+            str(account.id) if account else None,account.requests_per_hour if account else None):
+       # Hourly cap reached, or Redis unavailable: no supplier HTTP call.
+       job.status='pending';job.due_at=utc()+timedelta(minutes=15)
+       state=await db.scalar(select(CacheState).where(
+        CacheState.supplier_code==job.payload['supplier'],
+        CacheState.lookup_key==job.payload['key']))
+       if state and state.status=='refreshing':
+        state.expires_at=job.due_at+timedelta(minutes=2)
+       await db.commit()
+       return True
+      cfg.next_request_at=utc()+timedelta(seconds=cfg.min_interval_seconds)
+      await db.commit()
+     await search(db,job)
+    elif kind=='feed_import':
+     from app.modules.supplier_feeds.service import import_batch
+     await import_batch(db, UUID(job.payload['batch_id']))
+    elif kind=='feed_catalog_sync':
+     from app.modules.supplier_feeds.pipeline import run_sync
+     await run_sync(db,UUID(job.payload['sync_id']),int(job.payload['step']))
+    elif kind=='catalog_bulk':
+     from app.modules.catalog_bulk.service import execute_run
+     await execute_run(db, UUID(job.payload['run_id']))
+    elif kind=='catalog_enrichment':
+     from app.modules.catalog_enrichment.service import execute_run as execute_enrichment
+     await execute_enrichment(db, UUID(job.payload['run_id']))
+    elif kind=='multi_enrichment':
+     from app.modules.multi_enrichment.service import execute_run as execute_multi
+     await execute_multi(db, UUID(job.payload['run_id']))
+    elif kind=='draft_materialization':
+     from app.modules.draft_materialization.service import execute_run as execute_draft
+     await execute_draft(db, UUID(job.payload['run_id']),
+                         auto_step=job.payload.get('auto_step'),
+                         auto_generation=job.payload.get('auto_generation'))
+    elif kind=='procurement':await procurement(db,job)
+    elif kind=='refund':await refund(db,job)
+    elif kind=='replacement':await replacement(db,job)
+    elif kind=='payment_reconcile':
+     from app.modules.payments.reconciliation import reconcile_payment_job
+     await reconcile_payment_job(db,job)
+    elif kind=='refund_reconcile':
+     from app.modules.payments.refund_reconciliation import reconcile_refund_job
+     await reconcile_refund_job(db,job)
+    elif kind=='marketplace_reservation_expire':
+     from app.modules.marketplace.checkout_v017 import expire_reservation
+     await expire_reservation(db,UUID(job.payload['order_id']))
+    else:raise ValueError('Unknown job kind')
+    if kind == 'procurement':
+     # No external write contract: a reviewed-but-unplaced supplier purchase
+     # must stay visible to operators, never disappear as a successful job.
+     after = await db.get(Procurement, UUID(job.payload['id']))
+     job.status = 'manual_review' if after and after.status == 'manual_review' else 'done'
+    elif kind not in ('payment_reconcile','refund_reconcile') or job.status=='running':
+     job.status='done'
+    if lost.is_set() or not await still_owner(db,job_id,generation):
+     await db.rollback()
+     return True
+    await db.commit()
+    if kind=='search':
+     from app.modules.offer_engine.cache import invalidate
+     state=await db.scalar(select(CacheState).where(
+      CacheState.supplier_code==job.payload['supplier'],CacheState.lookup_key==job.payload['key']))
+     if state and state.product_id:
+      await invalidate(state.product_id)
+   except Exception as e:
+    await db.rollback()
+    if lost.is_set() or not await still_owner(db,job_id,generation):
+     await db.rollback()
+     return True
+    job=await db.get(Job,job_id)
+    job.status='manual_review' if kind in ('procurement','refund','replacement','marketplace_reservation_expire','payment_reconcile','refund_reconcile') else 'failed'
+    job.last_error=type(e).__name__;await db.commit()
+    logging.getLogger(__name__).warning('worker_job_failed job_id=%s kind=%s error_type=%s',
+                                        job_id,kind,type(e).__name__)
+   return True
 async def _refresh_loop():
  from app.modules.offer_engine.service import hot_refresh
  while True:

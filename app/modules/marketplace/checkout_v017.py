@@ -8,7 +8,8 @@ commercial_snapshot JSON for future brand, category, packaging and kit changes.
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from app.core.rate_limit import enforce_budget, peer_ip
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,8 @@ from app.modules.marketplace.api import QuotePreviewRequest, preview_supplier_qu
 from app.modules.suppliers.models import OfferSnapshot, SupplierItem
 from app.modules.offer_engine.models import OfferDetail
 from app.modules.payments.models import Payment
+from app.modules.marketplace.commercial_guardrails import MAX_CART_LINES
+from app.modules.marketplace.price_integrity_v0421 import compare_accepted_price
 
 router = APIRouter(prefix='/api/v1/marketplace/cart', tags=['marketplace-requests'])
 admin = APIRouter(prefix='/api/v1/admin/marketplace', tags=['marketplace-requests-admin'],
@@ -95,7 +98,7 @@ async def find_current(db,line,quantity=None):
                 'supplier_destination_id':str(line.supplier_destination_id),
                 'warehouse_id':preview['warehouse_id'],
                 'pickup_node_id':str(line.fulfillment_node_id),
-                'origin_node_id':preview['receiving_node'] if isinstance(preview['receiving_node'],str) else m.get('receiving_node_id'),
+                'origin_node_id':str(uuid.UUID(preview['receiving_node_id'])) if preview.get('receiving_node_id') else conflict('Receiving node UUID unavailable'),
                 'route_node_ids':preview['route_node_ids'],
                 'unit_retail':preview['unit_price'],
                 'goods_subtotal':preview['goods_subtotal'],
@@ -134,17 +137,26 @@ async def find_current(db,line,quantity=None):
 
 async def evaluate(db,cart):
     lines=(await db.scalars(select(CartLine).where(CartLine.cart_id==cart.id)
-                            .order_by(CartLine.id))).all()
+                            .order_by(CartLine.id).limit(MAX_CART_LINES+1))).all()
+    if len(lines)>MAX_CART_LINES:
+        conflict('Cart exceeds item limit; remove items before preview')
+    from app.modules.marketplace.quote_cache_v0421 import preview_scope
+    with preview_scope():
+        return await _evaluate_lines(db, cart, lines)
+
+
+async def _evaluate_lines(db, cart, lines):
     results=[]
     for line in lines:
         try:
             current=await find_current(db,line)
-            was=money(line.quoted_unit_retail) if line.quoted_unit_retail is not None else None
+            was=line.quoted_unit_retail
             stored_fee=(line.quote_metadata or {}).get('merchant_delivery_fee')
-            changed=(was is None or was!=money(current['unit_retail']) or
-                     stored_fee is None or money(stored_fee)!=money(current['merchant_delivery_fee']))
+            drift=compare_accepted_price(was,current['unit_retail'],stored_fee,current['merchant_delivery_fee'])
+            changed=drift['changed']
             current.update(valid=not changed,reason='Price or route tariff changed; reconfirm the item' if changed else None,
-                           accepted_unit_price=as_str(was),accepted_merchant_delivery_fee=stored_fee)
+                           accepted_unit_price=as_str(was),accepted_merchant_delivery_fee=stored_fee,
+                           price_drift=drift,requires_reconfirmation=changed)
         except HTTPException as exc:
             current={'line_id':str(line.id),'source_kind':line.line_kind,
                      'quantity':line.quantity,'valid':False,'reason':str(exc.detail)}
@@ -178,7 +190,7 @@ async def add_quote(body:AddQuote,user:User=Depends(current_user),db:AsyncSessio
           'route_node_ids':[str(x) for x in body.route_node_ids],
           'merchant_delivery_fee':quote['merchant_delivery_fee'],
           'warehouse_id':quote['warehouse_id'],
-          'receiving_node_id':(quote.get('route_node_ids') or [None])[0],
+          'receiving_node_id':str(uuid.UUID(quote['receiving_node_id'])) if quote.get('receiving_node_id') else conflict('Receiving node UUID unavailable'),
           'min_qty':quote['effective_min_qty'],'pack_multiple':quote['effective_pack_multiple'],
           'units_per_package':quote['units_per_package']}
     # Serialize cart creation and all quote edits per user on PostgreSQL.
@@ -190,6 +202,10 @@ async def add_quote(body:AddQuote,user:User=Depends(current_user),db:AsyncSessio
              CartLine.fulfillment_node_id==body.pickup_node_id))).all()
     line=next((x for x in rows if (x.quote_metadata or {}).get('route_node_ids')==meta['route_node_ids']),None)
     if line is None:
+        from sqlalchemy import func
+        count = await db.scalar(select(func.count()).select_from(CartLine).where(CartLine.cart_id==cart.id))
+        if int(count or 0)>=MAX_CART_LINES:
+            conflict('Cart item limit reached')
         line=CartLine(cart_id=cart.id,quantity=body.quantity,
             supplier_item_id=None,seller_offer_id=None,
             line_kind='supplier_quote',product_id=body.product_id,
@@ -208,7 +224,8 @@ async def add_quote(body:AddQuote,user:User=Depends(current_user),db:AsyncSessio
 
 
 @router.get('/v017/preview')
-async def preview(user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
+async def preview(request:Request,user:User=Depends(current_user),db:AsyncSession=Depends(get_session)):
+    await enforce_budget('marketplace_v017_preview',str(user.id)+':'+peer_ip(request),limit=30,period=60)
     cart=await open_cart(db,user,False)
     if not cart:return {'cart_id':None,'revision':0,'items':[],'item_count':0,
                         'ready_for_request':False,'known_components_total':'0.00',
@@ -392,6 +409,14 @@ async def cancel_request(db,order,*,expired=False):
         # exactly once; newer nonbinding requests have no reservation_key.
         if m.get('source_kind')=='own_stock' and m.get('reservation_key'):
             balance_id=uuid.UUID(m['inventory_balance_id'])
+            original=await db.scalar(select(InventoryMovement).where(
+                InventoryMovement.idempotency_key==str(m['reservation_key'])))
+            if (not original or original.balance_id!=balance_id or
+                    original.delta_reserved!=line.quantity or original.reason!='reserve'):
+                conflict('Historical inventory reservation lacks verified movement; manual review required')
+            if await db.scalar(select(InventoryMovement.id).where(
+                    InventoryMovement.idempotency_key==f'v017-release:{order.id}:{line.id}')):
+                conflict('Reservation already released; requires manual reconciliation')
             result=await db.scalar(update(InventoryBalance).where(
                 InventoryBalance.id==balance_id,
                 InventoryBalance.reserved>=line.quantity)
